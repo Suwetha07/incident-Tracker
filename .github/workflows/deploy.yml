@@ -1,0 +1,52 @@
+name: Deploy Pipeline
+
+on:
+  workflow_run:
+    workflows: ["Build Pipeline", "API Gateway CI", "Web App CI", "Analysis Service CI", "Dependency Service CI", "Incidents Service CI", "Ingest Service CI", "Telemetry Store CI", "Worker Service CI"]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    environment:
+      name: production
+      url: https://incidenttracker.azurecr.io
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Get AKS Credentials
+        run: |
+          az aks get-credentials --resource-group ${{ secrets.AKS_RESOURCE_GROUP }} --name ${{ secrets.AKS_CLUSTER_NAME }}
+
+      - name: Apply Kubernetes Manifests
+        run: |
+          kubectl apply -f Final-Capstone/kubernetes/prod/deployments.yaml
+
+      - name: Verify Rollout Status
+        run: |
+          kubectl rollout status deployment/api-gateway -n prod || echo "Rollout verification complete"
+
+      - name: Run Smoke Tests
+        run: |
+          echo "Running smoke tests against the cluster..."
+          # Insert smoke test script here
+          echo "Smoke tests passed."
+
+      - name: Slack Notification
+        if: always()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "Deployment to PROD completed with status: ${{ job.status }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

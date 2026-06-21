@@ -1,0 +1,78 @@
+name: Promote Image To Dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Deployment to update in dev/deployments.yaml"
+        required: true
+        type: choice
+        options:
+          - api-gateway
+          - frontend-ui
+          - incidents-service
+          - telemetry-store
+          - analysis-service
+          - dependency-service
+          - ingest-service
+          - worker-service
+      image_tag:
+        description: "Image tag already pushed to ACR (example: sha-abc123 or v1.2.3)"
+        required: true
+        type: string
+
+concurrency:
+  group: dev-promotion-${{ github.event.inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  update_values_dev:
+    name: Update dev/deployments.yaml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate Inputs
+        shell: bash
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          if [ -z "$SERVICE" ] || [ -z "$IMAGE_TAG" ]; then
+            echo "service and image_tag are required"
+            exit 1
+          fi
+
+      - name: Update deployments.yaml
+        uses: mikefarah/yq@v4.44.3
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        with:
+          cmd: |
+            if [ "$SERVICE" = "frontend-ui" ]; then
+              IMAGE_NAME="web-app"
+            else
+              IMAGE_NAME="$SERVICE"
+            fi
+            # Update the image tag for the specific deployment in the multi-document yaml
+            yq eval -i '(select(.metadata.name == strenv(SERVICE)) | .spec.template.spec.containers[0].image) = "incidenttracker.azurecr.io/" + env(IMAGE_NAME) + ":" + strenv(IMAGE_TAG)' Final-Capstone/kubernetes/dev/deployments.yaml
+
+      - name: Commit and Push
+        shell: bash
+        run: |
+          if git diff --quiet -- Final-Capstone/kubernetes/dev/deployments.yaml; then
+            echo "No changes detected in dev/deployments.yaml"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Final-Capstone/kubernetes/dev/deployments.yaml
+          git commit -m "promote(dev): ${{ github.event.inputs.service }} -> ${{ github.event.inputs.image_tag }}"
+          git push origin HEAD:main

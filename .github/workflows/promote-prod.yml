@@ -1,0 +1,91 @@
+name: Promote Image To Prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Deployment to update in prod/deployments.yaml"
+        required: true
+        type: choice
+        options:
+          - api-gateway
+          - frontend-ui
+          - incidents-service
+          - telemetry-store
+          - analysis-service
+          - dependency-service
+          - ingest-service
+          - worker-service
+      image_tag:
+        description: "Image tag to promote (example: sha-abc123 or v1.2.3)"
+        required: true
+        type: string
+
+concurrency:
+  group: prod-promotion-${{ github.event.inputs.service }}
+  cancel-in-progress: false
+
+jobs:
+  approval_gate:
+    name: Manual Approval Gate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Approval Confirmed
+        run: echo "Production approval granted."
+
+  update_values_prod:
+    name: Update prod/deployments.yaml
+    runs-on: ubuntu-latest
+    needs: approval_gate
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate Inputs
+        shell: bash
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          if [ -z "$SERVICE" ] || [ -z "$IMAGE_TAG" ]; then
+            echo "service and image_tag are required"
+            exit 1
+          fi
+
+      - name: Update deployments.yaml
+        uses: mikefarah/yq@v4.44.3
+        env:
+          SERVICE: ${{ github.event.inputs.service }}
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+        with:
+          cmd: |
+            if [ ! -f "Final-Capstone/kubernetes/prod/deployments.yaml" ]; then
+              echo "Error: Final-Capstone/kubernetes/prod/deployments.yaml does not exist yet."
+              exit 1
+            fi
+            if [ "$SERVICE" = "frontend-ui" ]; then
+              IMAGE_NAME="web-app"
+            else
+              IMAGE_NAME="$SERVICE"
+            fi
+            # Update the image tag for the specific deployment in the multi-document yaml
+            yq eval -i '(select(.metadata.name == strenv(SERVICE)) | .spec.template.spec.containers[0].image) = "incidenttracker.azurecr.io/" + env(IMAGE_NAME) + ":" + strenv(IMAGE_TAG)' Final-Capstone/kubernetes/prod/deployments.yaml
+
+      - name: Commit and Push
+        shell: bash
+        run: |
+          if git diff --quiet -- Final-Capstone/kubernetes/prod/deployments.yaml; then
+            echo "No changes detected in prod/deployments.yaml"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Final-Capstone/kubernetes/prod/deployments.yaml
+          git commit -m "promote(prod): ${{ github.event.inputs.service }} -> ${{ github.event.inputs.image_tag }}"
+          git push origin HEAD:main
