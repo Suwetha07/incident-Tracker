@@ -7,3 +7,5 @@ psycopg2-binary
 PyYAML
 httpx
 azure-identity
+azure-storage-blob
+python-multipart

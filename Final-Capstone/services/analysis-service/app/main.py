@@ -1,6 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
+import httpx
+import os
+import json
+from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+from azure.storage.blob import BlobServiceClient
 
 app = FastAPI(title="Analysis Service")
 
@@ -11,6 +17,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize Azure OpenAI client
+client = AsyncAzureOpenAI(
+    api_key=os.environ.get("AZURE_OPENAI_API_KEY", "mock-key"),
+    api_version="2024-02-15-preview",
+    azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", "https://mock.openai.azure.com/")
+)
+
+def is_ai_enabled():
+    return os.environ.get("AZURE_OPENAI_API_KEY") is not None and os.environ.get("AZURE_OPENAI_API_KEY") != "mock-key"
+
+
+# ----- FILE UPLOAD ENDPOINT -----
+AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+CONTAINER_NAME = "kubeconfig"
+
+@app.post("/analysis-service/upload-kubeconfig")
+async def upload_kubeconfig(file: UploadFile = File(...)):
+    if not AZURE_STORAGE_CONNECTION_STRING:
+        raise HTTPException(status_code=500, detail="Storage connection string not configured.")
+
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(CONTAINER_NAME)
+        
+        if not container_client.exists():
+            container_client.create_container()
+
+        blob_client = container_client.get_blob_client(file.filename)
+        file_content = await file.read()
+        blob_client.upload_blob(file_content, overwrite=True)
+
+        return {
+            "message": "Successfully uploaded file to Azure Storage container!",
+            "filename": file.filename,
+            "container": CONTAINER_NAME
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload: {str(e)}")
+# --------------------------------
+
 
 # Mock databases
 rca_db = {
@@ -106,21 +153,17 @@ async def health():
     return {"status": "ok"}
 
 
-import httpx
-
 @app.get("/analysis-service/incidents/{incident_id}/rca", response_model=Dict[str, Any])
 async def get_rca(incident_id: str, request: Request):
     prom_url = request.headers.get("X-Prometheus-URL")
     
-    # Fetch the real incident details from incidents-service
     incident = None
     try:
         headers = {}
         if prom_url:
             headers["X-Prometheus-URL"] = prom_url
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            # We are inside docker network, we can hit the incidents-service container directly
-            res = await client.get(f"http://incidents-service:8004/incidents-service/incidents", headers=headers)
+        async with httpx.AsyncClient(timeout=5.0) as http_client:
+            res = await http_client.get(f"http://incidents-service:8004/incidents-service/incidents", headers=headers)
             if res.status_code == 200:
                 incidents = res.json()
                 for inc in incidents:
@@ -128,51 +171,39 @@ async def get_rca(incident_id: str, request: Request):
                         incident = inc
                         break
     except Exception as e:
-        print(f"Failed to fetch incident from incidents-service: {e}")
         pass
         
     pod_context = ""
     if incident:
         desc = incident.get("description", "")
         service = incident.get("service", "")
-        pod_context = f" Based on the telemetry, the exact component affected is {service}. Details: {desc}."
+        pod_context = f" Based on the telemetry, the component affected is {service}. Details: {desc}."
+
+    if is_ai_enabled() and incident:
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a Kubernetes SRE. Return ONLY JSON with keys: rootCause, confidence, explanation, evidenceRefs (list)."},
+                    {"role": "user", "content": f"Analyze this incident: {incident_id}. Context: {pod_context}"}
+                ],
+                response_format={"type": "json_object"}
+            )
+            ai_data = json.loads(response.choices[0].message.content)
+            ai_data["incidentId"] = incident_id
+            ai_data["aiModel"] = "Azure AI Foundry (GPT-4o)"
+            return ai_data
+        except Exception as e:
+            print(f"AI Generation failed: {e}")
 
     if incident_id.startswith("inc-k8s-"):
         return {
             "incidentId": incident_id,
             "rootCause": f"Container crash or initialization failure in {incident.get('service', 'the workload') if incident else 'the workload'}",
             "confidence": 95.0,
-            "explanation": f"The target Kubernetes pod entered a non-running or unscheduled phase.{pod_context} This generally occurs when liveness/readiness probes repeatedly fail, required secrets/configmaps are missing, or the containerized process encounters an unhandled runtime error during boot.",
+            "explanation": f"The target Kubernetes pod entered a non-running or unscheduled phase.{pod_context} This occurs when probes fail or runtime errors happen.",
             "evidenceRefs": [
                 "Kubernetes API: pod phase status set to non-Running",
-                "Kubelet logs: container check failed or was terminated",
-                f"Incident Context: {incident.get('title', 'Unknown Title') if incident else 'None'}"
-            ],
-            "aiModel": "Antigravity Dynamic Diagnostics Agent"
-        }
-        
-    if incident_id.startswith("inc-restart-"):
-        return {
-            "incidentId": incident_id,
-            "rootCause": f"Transient process restarts or CrashLoopBackOff in {incident.get('service', 'the service') if incident else 'the service'}",
-            "confidence": 88.0,
-            "explanation": f"The pod is restarting repeatedly.{pod_context} This pattern points to thread starvation, JVM OutOfMemory (OOM) code 137, transient external API gateway timeouts, or misconfigured database connection pool caps.",
-            "evidenceRefs": [
-                "Kubernetes API: container restartCount spiked above threshold",
-                "Node Event: container terminated with exit status code 137",
-                f"Incident Context: {incident.get('title', 'Unknown Title') if incident else 'None'}"
-            ],
-            "aiModel": "Antigravity Dynamic Diagnostics Agent"
-        }
-
-    if incident_id.startswith("alt-prom-"):
-        return {
-            "incidentId": incident_id,
-            "rootCause": f"Prometheus Alert Triggered: {incident.get('title', 'Alert') if incident else 'Alert'}",
-            "confidence": 92.0,
-            "explanation": f"Prometheus alert manager fired an alert condition.{pod_context} Review the Prometheus queries to understand the metric threshold violation.",
-            "evidenceRefs": [
-                "Prometheus AlertManager: Active firing alert rule",
                 f"Incident Context: {incident.get('title', 'Unknown Title') if incident else 'None'}"
             ],
             "aiModel": "Antigravity Dynamic Diagnostics Agent"
@@ -183,69 +214,37 @@ async def get_rca(incident_id: str, request: Request):
     return rca_db[incident_id]
 
 
-from pydantic import BaseModel
-
 class ChatRequest(BaseModel):
     message: str
     cluster_name: Optional[str] = None
 
 @app.post("/analysis-service/chat")
 async def chat(request: ChatRequest):
+    if is_ai_enabled():
+        try:
+            response = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are a helpful Kubernetes SRE assistant managing an AKS cluster."},
+                    {"role": "user", "content": f"Context: Cluster is {request.cluster_name}. User says: {request.message}"}
+                ]
+            )
+            return {"reply": response.choices[0].message.content}
+        except Exception as e:
+            pass 
+
     message = request.message.lower()
     if "deployment" in message:
-        response = "Based on recent cluster metrics, there are several deployments that may be causing issues. Have you checked the latest rollout of your active services?"
+        response = "Based on recent cluster metrics, there are several deployments that may be causing issues."
     elif "incident" in message:
-        response = "I can analyze your active incidents. If you see high CPU or Memory usage, please navigate to the Incident Details page to generate a specific RCA."
-    elif "prometheus" in message:
-        response = "Prometheus is configured and feeding data into the backend. Alert rules are evaluated every minute to generate incidents."
+        response = "I can analyze your active incidents. Navigate to the Incident Details page to generate an RCA."
     else:
-        response = f"I am analyzing the {request.cluster_name or 'cluster'} topology. I can see the data flowing from Kubernetes and Prometheus. What specific service would you like me to look into?"
+        response = f"I am analyzing the {request.cluster_name or 'cluster'} topology. I see data flowing from K8s and Prometheus. What specific service would you like me to look into?"
     return {"reply": response}
 
 @app.get("/analysis-service/incidents/{incident_id}/recommendations", response_model=List[Dict[str, Any]])
 async def get_recommendations(incident_id: str):
-    if incident_id.startswith("inc-k8s-"):
-        return [
-            {
-                "id": f"rec-{incident_id}-1",
-                "title": "Check Pod Logs & Description",
-                "description": "Run 'kubectl logs' and 'kubectl describe pod' to inspect stderr outputs, termination messages, or mount errors.",
-                "type": "resource",
-                "priority": "high",
-                "estimatedImpact": "Identifies the exact runtime exception or configuration issue causing startup failure."
-            },
-            {
-                "id": f"rec-{incident_id}-2",
-                "title": "Verify ConfigMaps and Secrets",
-                "description": "Ensure all env variables, configurations, and vault credentials referenced by the container specification exist and are correctly structured.",
-                "type": "restart",
-                "priority": "medium",
-                "estimatedImpact": "Resolves dependency loading errors."
-            }
-        ]
-        
-    if incident_id.startswith("inc-restart-"):
-        return [
-            {
-                "id": f"rec-{incident_id}-1",
-                "title": "Profile memory usage and limits",
-                "description": "Analyze heap memory and container limits. Check if the restart is due to OOM kills (Exit code 137).",
-                "type": "resource",
-                "priority": "high",
-                "estimatedImpact": "Prevents container runtime environment from terminating the JVM/Node process."
-            },
-            {
-                "id": f"rec-{incident_id}-2",
-                "title": "Configure Liveness/Readiness probes thresholds",
-                "description": "Increase initialDelaySeconds or failureThreshold to allow slow starting backend services to complete initialization before being restarted.",
-                "type": "restart",
-                "priority": "medium",
-                "estimatedImpact": "Mitigates startup-loop restarts."
-            }
-        ]
-
     return recommendations_db.get(incident_id, [])
-
 
 @app.get("/analysis-service/knowledge-base", response_model=List[Dict[str, Any]])
 async def get_knowledge_base(q: Optional[str] = None):
