@@ -63,13 +63,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8000
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -166,13 +166,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8004
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8004
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -224,13 +224,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8002
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8002
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -282,13 +282,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8003
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8003
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -340,13 +340,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8005
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8005
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -398,13 +398,13 @@ spec:
               memory: 512Mi
           livenessProbe:
             httpGet:
-              path: /healthz
+              path: /health
               port: 8001
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /ready
+              path: /health
               port: 8001
             initialDelaySeconds: 10
             periodSeconds: 10
