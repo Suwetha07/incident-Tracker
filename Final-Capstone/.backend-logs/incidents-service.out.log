@@ -1,0 +1,7 @@
+INFO:     127.0.0.1:59733 - "GET /incidents-service/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59738 - "GET /incidents-service/kpis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59746 - "GET /incidents-service/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59760 - "GET /incidents-service/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59884 - "GET /incidents-service/alerts HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59883 - "GET /incidents-service/kpis HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59957 - "GET /incidents-service/incidents HTTP/1.1" 200 OK

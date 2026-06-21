@@ -1,0 +1,103 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ki_engine
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - '6379:6379'
+
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - '8000:8000'
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+  ingest-service:
+    build: ./services/ingest-service
+    ports:
+      - '8001:8001'
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+  telemetry-store:
+    build: ./services/telemetry-store
+    ports:
+      - '8002:8002'
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+  analysis-service:
+    build: ./services/analysis-service
+    ports:
+      - '8003:8003'
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+  dependency-service:
+    build: ./services/dependency-service
+    ports:
+      - '8005:8005'
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+  incidents-service:
+    build: ./services/incidents-service
+    ports:
+      - '8004:8004'
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+    volumes:
+      - tmp-data:/app/.backend-logs/tmp
+
+
+
+  worker-service:
+    build: ./services/worker-service
+    depends_on:
+      - redis
+
+  web-app:
+    build: ./frontend/web-app
+    ports:
+      - '3000:8080'
+    depends_on:
+      - api-gateway
+
+volumes:
+  pgdata:
+  tmp-data:

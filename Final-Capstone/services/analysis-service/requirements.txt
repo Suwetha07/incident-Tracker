@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+langchain
+openai
+sqlalchemy
+psycopg2-binary
+PyYAML
+httpx
+azure-identity
