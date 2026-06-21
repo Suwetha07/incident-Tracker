@@ -46,7 +46,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: api-gateway
-          image: incidenttracker.azurecr.io/api-gateway:latest
+          image: incidenttracker.azurecr.io/api-gateway:v1
           ports:
             - containerPort: 8000
           envFrom:
@@ -104,7 +104,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: frontend-ui
-          image: incidenttracker.azurecr.io/web-app:latest
+          image: incidenttracker.azurecr.io/web-app:v1
           ports:
             - containerPort: 8080
           envFrom:
@@ -149,7 +149,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: incidents-service
-          image: incidenttracker.azurecr.io/incidents-service:latest
+          image: incidenttracker.azurecr.io/incidents-service:v1
           ports:
             - containerPort: 8004
           envFrom:
@@ -207,7 +207,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: telemetry-store
-          image: incidenttracker.azurecr.io/telemetry-store:latest
+          image: incidenttracker.azurecr.io/telemetry-store:v1
           ports:
             - containerPort: 8002
           envFrom:
@@ -265,7 +265,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: analysis-service
-          image: incidenttracker.azurecr.io/analysis-service:latest
+          image: incidenttracker.azurecr.io/analysis-service:v1
           ports:
             - containerPort: 8003
           envFrom:
@@ -323,7 +323,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: dependency-service
-          image: incidenttracker.azurecr.io/dependency-service:latest
+          image: incidenttracker.azurecr.io/dependency-service:v1
           ports:
             - containerPort: 8005
           envFrom:
@@ -381,7 +381,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: ingest-service
-          image: incidenttracker.azurecr.io/ingest-service:latest
+          image: incidenttracker.azurecr.io/ingest-service:v1
           ports:
             - containerPort: 8001
           envFrom:
