@@ -104,7 +104,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: frontend-ui
-          image: incidenttracker.azurecr.io/web-app:v1
+          image: incidenttracker.azurecr.io/web-app:v2
           ports:
             - containerPort: 8080
           envFrom:
