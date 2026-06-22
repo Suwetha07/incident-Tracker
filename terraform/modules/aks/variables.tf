@@ -1,0 +1,9 @@
+variable "resource_group_name" {}
+variable "location" {}
+variable "cluster_name" {}
+variable "dns_prefix" {}
+variable "aks_subnet_id" {}
+variable "service_cidr" {}
+variable "dns_service_ip" {}
+variable "acr_id" {}
+variable "tags" {}

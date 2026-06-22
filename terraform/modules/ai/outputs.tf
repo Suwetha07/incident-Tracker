@@ -1,0 +1,1 @@
+output "ai_endpoint" { value = azurerm_cognitive_account.ai.endpoint }
