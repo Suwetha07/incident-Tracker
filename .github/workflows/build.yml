@@ -1,21 +1,65 @@
 name: Build Pipeline
 
-# on:
-#   push:
-#     branches: [main, develop]
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - 'terraform/**'
+      - 'kubernetes/**'
 
 jobs:
-  # This pipeline serves as the primary build trigger for the entire application,
-  # satisfying the rubric requirement for a centralized "build.yml" that runs
-  # lint, test, trivy scanning, and push to ACR with security gates.
-  # 
-  # Note: The actual microservice builds are orchestrated by the `ci-*.yml` 
-  # workflows utilizing the reusable `ci.yaml` template.
-  security-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Code checkout
-        uses: actions/checkout@v4
-      - name: Confirm Security Gates
-        run: |
-          echo "Security gates passed: Trivy fails on CRITICAL/HIGH, Sonar/Snyk active."
+  build-web-app:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "web-app"
+      docker_context: "Final-Capstone/frontend/web-app"
+    secrets: inherit
+
+  build-api-gateway:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "api-gateway"
+      docker_context: "Final-Capstone/services/api-gateway"
+    secrets: inherit
+
+  build-analysis-service:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "analysis-service"
+      docker_context: "Final-Capstone/services/analysis-service"
+    secrets: inherit
+
+  build-dependency-service:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "dependency-service"
+      docker_context: "Final-Capstone/services/dependency-service"
+    secrets: inherit
+
+  build-incidents-service:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "incidents-service"
+      docker_context: "Final-Capstone/services/incidents-service"
+    secrets: inherit
+
+  build-ingest-service:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "ingest-service"
+      docker_context: "Final-Capstone/services/ingest-service"
+    secrets: inherit
+
+  build-telemetry-store:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "telemetry-store"
+      docker_context: "Final-Capstone/services/telemetry-store"
+    secrets: inherit
+
+  build-worker-service:
+    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    with:
+      image_name: "worker-service"
+      docker_context: "Final-Capstone/services/worker-service"
+    secrets: inherit
