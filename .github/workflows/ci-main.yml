@@ -1,11 +1,11 @@
 name: CI Pipeline
 
-on:
-  push:
-    branches: [ "main", "develop" ]
-    paths-ignore:
-      - 'terraform/**'
-      - 'kubernetes/**'
+# on:
+#   push:
+#     branches: [ "main", "develop" ]
+#     paths-ignore:
+#       - 'terraform/**'
+#       - 'kubernetes/**'
 
 jobs:
   build-scan-push:

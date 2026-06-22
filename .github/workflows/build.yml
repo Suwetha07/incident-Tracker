@@ -1,8 +1,8 @@
 name: Build Pipeline
 
-on:
-  push:
-    branches: [main, develop]
+# on:
+#   push:
+#     branches: [main, develop]
 
 jobs:
   # This pipeline serves as the primary build trigger for the entire application,
