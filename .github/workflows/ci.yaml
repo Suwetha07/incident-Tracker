@@ -111,6 +111,10 @@ jobs:
       - name: SonarQube Scan
         if: ${{ steps.checks.outputs.run_sonar == 'true' }}
         uses: SonarSource/sonarqube-scan-action@v2
+        with:
+          args: >
+            -Dsonar.projectKey=Suwetha07_incident-Tracker
+            -Dsonar.organization=suwetha07
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
