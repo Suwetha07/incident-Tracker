@@ -1,0 +1,32 @@
+name: Build Telemetry Store
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/services/telemetry-store/**'
+      - '.github/workflows/ci-telemetry-store.yml'
+      - '.github/workflows/ci.yaml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/services/telemetry-store/**'
+      - '.github/workflows/ci-telemetry-store.yml'
+      - '.github/workflows/ci.yaml'
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yaml
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    with:
+      image_name: "telemetry-store"
+      docker_context: "Final-Capstone/services/telemetry-store"
+    secrets: inherit

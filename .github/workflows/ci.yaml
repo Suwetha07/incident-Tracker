@@ -122,7 +122,7 @@ jobs:
       - name: Snyk Scan
         if: ${{ steps.checks.outputs.run_snyk == 'true' && steps.check_pkg.outputs.exists == 'true' }}
         working-directory: ${{ inputs.docker_context }}
-        run: npx --yes snyk test
+        run: npx --yes snyk test -d
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 

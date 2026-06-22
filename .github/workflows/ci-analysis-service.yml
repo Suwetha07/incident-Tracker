@@ -1,0 +1,32 @@
+name: Build Analysis Service
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/services/analysis-service/**'
+      - '.github/workflows/ci-analysis-service.yml'
+      - '.github/workflows/ci.yaml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/services/analysis-service/**'
+      - '.github/workflows/ci-analysis-service.yml'
+      - '.github/workflows/ci.yaml'
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yaml
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    with:
+      image_name: "analysis-service"
+      docker_context: "Final-Capstone/services/analysis-service"
+    secrets: inherit
