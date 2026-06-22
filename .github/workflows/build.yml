@@ -9,56 +9,56 @@ on:
 
 jobs:
   build-web-app:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "web-app"
       docker_context: "Final-Capstone/frontend/web-app"
     secrets: inherit
 
   build-api-gateway:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "api-gateway"
       docker_context: "Final-Capstone/services/api-gateway"
     secrets: inherit
 
   build-analysis-service:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "analysis-service"
       docker_context: "Final-Capstone/services/analysis-service"
     secrets: inherit
 
   build-dependency-service:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "dependency-service"
       docker_context: "Final-Capstone/services/dependency-service"
     secrets: inherit
 
   build-incidents-service:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "incidents-service"
       docker_context: "Final-Capstone/services/incidents-service"
     secrets: inherit
 
   build-ingest-service:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "ingest-service"
       docker_context: "Final-Capstone/services/ingest-service"
     secrets: inherit
 
   build-telemetry-store:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "telemetry-store"
       docker_context: "Final-Capstone/services/telemetry-store"
     secrets: inherit
 
   build-worker-service:
-    uses: Suwetha07/incident-Tracker/.github/workflows/ci.yaml@main
+    uses: ./.github/workflows/ci.yaml
     with:
       image_name: "worker-service"
       docker_context: "Final-Capstone/services/worker-service"
