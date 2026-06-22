@@ -2,7 +2,15 @@ name: CD Pipeline
 
 on:
   workflow_run:
-    workflows: ["Build Pipeline"]
+    workflows:
+      - "Build Web App"
+      - "Build Api Gateway"
+      - "Build Analysis Service"
+      - "Build Dependency Service"
+      - "Build Incidents Service"
+      - "Build Ingest Service"
+      - "Build Telemetry Store"
+      - "Build Worker Service"
     types:
       - completed
 

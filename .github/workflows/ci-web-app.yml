@@ -1,0 +1,32 @@
+name: Build Web App
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/frontend/web-app/**'
+      - '.github/workflows/ci-web-app.yml'
+      - '.github/workflows/ci.yaml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Final-Capstone/frontend/web-app/**'
+      - '.github/workflows/ci-web-app.yml'
+      - '.github/workflows/ci.yaml'
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/ci.yaml
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    with:
+      image_name: "web-app"
+      docker_context: "Final-Capstone/frontend/web-app"
+    secrets: inherit
