@@ -120,12 +120,13 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Snyk Scan
-        if: ${{ steps.checks.outputs.run_snyk == 'true' }}
+        if: ${{ steps.checks.outputs.run_snyk == 'true' && steps.check_pkg.outputs.exists == 'true' }}
         uses: snyk/actions/node@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: test
+          args: --file=${{ inputs.docker_context }}/package.json
 
       - name: Login to ACR
         if: ${{ inputs.push_image }}
@@ -179,4 +180,4 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
 
-          
+        
