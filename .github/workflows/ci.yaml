@@ -121,12 +121,10 @@ jobs:
 
       - name: Snyk Scan
         if: ${{ steps.checks.outputs.run_snyk == 'true' && steps.check_pkg.outputs.exists == 'true' }}
-        uses: snyk/actions/node@master
+        working-directory: ${{ inputs.docker_context }}
+        run: npx --yes snyk test
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          command: test
-          args: --file=${{ inputs.docker_context }}/package.json
 
       - name: Login to ACR
         if: ${{ inputs.push_image }}
