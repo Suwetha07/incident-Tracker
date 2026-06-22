@@ -1,0 +1,46 @@
+global:
+  environment: dev
+  registry: incidenttracker.azurecr.io
+  workloadIdentityClientId: "64357ea7-2f5f-4afa-915d-314f95862d4e"
+  keyvaultName: "incident-tracker-kv"
+  tenantId: "d8537334-bc24-4daf-95a8-bf4c9fb14394"
+
+postgres:
+  host: my-azure-db.postgres.database.azure.com
+  db: ki_engine
+
+redis:
+  host: redis-svc
+
+services:
+  api-gateway:
+    replicas: 2
+    imageTag: v1
+    port: 8000
+  frontend-ui:
+    replicas: 2
+    imageTag: v2
+    port: 8080
+  incidents-service:
+    replicas: 2
+    imageTag: v1
+    port: 8004
+  telemetry-service:
+    replicas: 2
+    imageTag: v1
+    port: 8002
+  analysis-service:
+    replicas: 2
+    imageTag: v1
+    port: 8003
+  dependency-service:
+    replicas: 2
+    imageTag: v1
+    port: 8005
+  ingest-service:
+    replicas: 2
+    imageTag: v1
+    port: 8001
+  worker-service:
+    replicas: 1
+    imageTag: v1

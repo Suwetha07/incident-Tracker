@@ -1,0 +1,64 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: incident-tracker-route
+  namespace: {{ .Values.global.environment }}
+spec:
+  parentRefs:
+    - name: incident-tracker-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /incidents-service
+      backendRefs:
+        - name: incidents-service-svc
+          port: 8004
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /telemetry-store
+      backendRefs:
+        - name: telemetry-store-svc
+          port: 8002
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /analysis-service
+      backendRefs:
+        - name: analysis-service-svc
+          port: 8003
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /dependency-service
+      backendRefs:
+        - name: dependency-service-svc
+          port: 8005
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /ingest-service
+      backendRefs:
+        - name: ingest-service-svc
+          port: 8001
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /cluster
+      backendRefs:
+        - name: api-gateway-svc
+          port: 8000
+
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend-ui
+          port: 80

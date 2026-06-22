@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: prod
+data:
+  POSTGRES_DB: ki_engine
+  POSTGRES_HOST: my-azure-db.postgres.database.azure.com
+  REDIS_HOST: redis-svc
+  API_GATEWAY_URL: http://api-gateway-svc:8000
+  FRONTEND_API_URL: /api
+

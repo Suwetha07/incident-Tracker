@@ -1,0 +1,4 @@
+global:
+  environment: prod
+  workloadIdentityClientId: "REPLACE_WITH_PRODUCTION_MANAGED_IDENTITY_CLIENT_ID"
+  keyvaultName: "incident-tracker-prod-kv"
