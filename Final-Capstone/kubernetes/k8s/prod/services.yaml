@@ -50,4 +50,57 @@ spec:
     - port: 8004
       targetPort: 8004
   type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telemetry-store-svc
+  namespace: prod
+spec:
+  selector:
+    app: telemetry-store
+  ports:
+    - port: 8002
+      targetPort: 8002
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analysis-service-svc
+  namespace: prod
+spec:
+  selector:
+    app: analysis-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dependency-service-svc
+  namespace: prod
+spec:
+  selector:
+    app: dependency-service
+  ports:
+    - port: 8005
+      targetPort: 8005
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingest-service-svc
+  namespace: prod
+spec:
+  selector:
+    app: ingest-service
+  ports:
+    - port: 8001
+      targetPort: 8001
+  type: ClusterIP
+
 
