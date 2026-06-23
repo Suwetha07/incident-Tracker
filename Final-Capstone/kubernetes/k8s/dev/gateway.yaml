@@ -12,3 +12,14 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: suwethaskill.shop
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: suwethaskill-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
