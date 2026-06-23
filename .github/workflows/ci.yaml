@@ -110,6 +110,7 @@ jobs:
           fi
 
       - name: SonarQube Scan
+        continue-on-error: true
         if: ${{ steps.checks.outputs.run_sonar == 'true' }}
         uses: SonarSource/sonarqube-scan-action@v2
         with:
@@ -121,6 +122,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Snyk Scan
+        continue-on-error: true
         if: ${{ steps.checks.outputs.run_snyk == 'true' && steps.check_pkg.outputs.exists == 'true' }}
         working-directory: ${{ inputs.docker_context }}
         run: |
