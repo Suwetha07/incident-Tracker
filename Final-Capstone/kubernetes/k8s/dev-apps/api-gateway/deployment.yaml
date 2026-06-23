@@ -49,6 +49,8 @@ spec:
             - name: secrets-store-inline
               mountPath: "/mnt/secrets-store"
               readOnly: true
+            - name: shared-temp-data
+              mountPath: /app/.backend-logs/tmp
       volumes:
         - name: secrets-store-inline
           csi:
@@ -56,4 +58,7 @@ spec:
             readOnly: true
             volumeAttributes:
               secretProviderClass: "azure-kv-secrets"
+        - name: shared-temp-data
+          persistentVolumeClaim:
+            claimName: shared-temp-data-pvc
 ---
