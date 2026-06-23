@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: https://github.com/Suwetha07/incident-Tracker.git
     targetRevision: main
-    path: Final-Capstone/kubernetes/prod
+    path: Final-Capstone/kubernetes/k8s/prod
   destination:
     server: https://kubernetes.default.svc
     namespace: prod
