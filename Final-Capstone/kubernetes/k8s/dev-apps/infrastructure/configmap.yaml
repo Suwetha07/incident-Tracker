@@ -9,3 +9,9 @@ data:
   REDIS_HOST: redis-svc
   API_GATEWAY_URL: http://api-gateway-svc:8000
   FRONTEND_API_URL: /api
+  INGEST_SERVICE_HOST: ingest-service-svc
+  TELEMETRY_STORE_HOST: telemetry-store-svc
+  ANALYSIS_SERVICE_HOST: analysis-service-svc
+  INCIDENTS_SERVICE_HOST: incidents-service-svc
+  DEPENDENCY_SERVICE_HOST: dependency-service-svc
+

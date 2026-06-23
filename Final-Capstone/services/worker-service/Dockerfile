@@ -14,4 +14,4 @@ RUN pip install --no-cache /wheels/*
 COPY app ./app
 RUN mkdir -p /app/.backend-logs/tmp && chown -R appuser:appuser /app
 USER appuser
-CMD ["celery", "-A", "app.tasks.worker", "worker", "--loglevel=info"]
+CMD ["celery", "-A", "app.tasks", "worker", "--loglevel=info"]
