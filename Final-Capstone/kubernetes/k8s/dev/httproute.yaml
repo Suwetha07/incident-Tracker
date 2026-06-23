@@ -7,7 +7,22 @@ spec:
   parentRefs:
     - name: incident-tracker-gateway
   rules:
-    # 1. Direct microservice routing (Bypassing Python API Gateway proxy)
+    # 1. API Route with prefix rewrite to API Gateway
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: api-gateway-svc
+          port: 8000
+
+    # 2. Direct microservice routing (Bypassing Python API Gateway proxy)
     - matches:
         - path:
             type: PathPrefix
