@@ -1,21 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-app-dev
+  name: incidenttracker-prod-api-gateway
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Suwetha07/incident-Tracker.git
     targetRevision: main
-    path: argocd/apps-dev
+    path: Final-Capstone/kubernetes/k8s/prod-apps/api-gateway
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: prod
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-

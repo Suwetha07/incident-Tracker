@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: telemetry-store-svc
+  namespace: dev
+spec:
+  selector:
+    app: telemetry-store
+  ports:
+    - port: 8002
+      targetPort: 8002
+  type: ClusterIP
+---

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dependency-service-svc
+  namespace: prod
+spec:
+  selector:
+    app: dependency-service
+  ports:
+    - port: 8005
+      targetPort: 8005
+  type: ClusterIP
+---

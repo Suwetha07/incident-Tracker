@@ -1,21 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-app-dev
+  name: incidenttracker-dev-dependency-service
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Suwetha07/incident-Tracker.git
     targetRevision: main
-    path: argocd/apps-dev
+    path: Final-Capstone/kubernetes/k8s/dev-apps/dependency-service
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: dev
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-
