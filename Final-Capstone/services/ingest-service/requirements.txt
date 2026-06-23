@@ -1,6 +1,12 @@
-fastapi
+fastapi>=0.115.0
 uvicorn[standard]
 httpx
 prometheus-api-client
 loki-client
 kubernetes
+cryptography>=48.0.1
+urllib3>=2.7.0
+azure-core>=1.38.0
+pyjwt>=2.13.0
+requests>=2.33.0
+starlette>=0.45.1

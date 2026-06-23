@@ -1,5 +1,0 @@
-INFO:     127.0.0.1:59731 - "GET /ingest-service/deployments HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59765 - "GET /ingest-service/deployments HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59875 - "GET /ingest-service/deployments HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59893 - "GET /ingest-service/deployments HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59972 - "GET /ingest-service/deployments HTTP/1.1" 200 OK

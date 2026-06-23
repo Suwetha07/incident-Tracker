@@ -1,10 +1,12 @@
+{{- $namespace := .Values.namespace | default .Release.Namespace -}}
+{{- $gw := .Values.gateway | default dict -}}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: incident-tracker-gateway
-  namespace: {{ .Values.global.environment }}
+  name: {{ get $gw "name" | default "incident-tracker-gateway" }}
+  namespace: {{ $namespace }}
 spec:
-  gatewayClassName: kgateway
+  gatewayClassName: {{ get $gw "className" | default "kgateway" }}
   listeners:
     - name: http
       protocol: HTTP

@@ -1,46 +1,122 @@
 global:
   environment: dev
-  registry: incidenttracker.azurecr.io
-  workloadIdentityClientId: "64357ea7-2f5f-4afa-915d-314f95862d4e"
-  keyvaultName: "incident-tracker-kv"
-  tenantId: "d8537334-bc24-4daf-95a8-bf4c9fb14394"
 
-postgres:
-  host: my-azure-db.postgres.database.azure.com
-  db: ki_engine
+namespace: dev
+
+secrets:
+  name: azure-kv-secrets
+  tenantId: "d8537334-bc24-4daf-95a8-bf4c9fb14394"
+  keyvaultName: "incident-tracker-kv"
+  workloadIdentityClientId: "64357ea7-2f5f-4afa-915d-314f95862d4e"
+
+config:
+  POSTGRES_DB: ki_engine
+  POSTGRES_HOST: my-azure-db.postgres.database.azure.com
+  REDIS_HOST: redis-svc
+  API_GATEWAY_URL: http://api-gateway-svc:8000
+  FRONTEND_API_URL: /api
+
+gateway:
+  name: incident-tracker-gateway
+  className: kgateway
+
+apiGateway:
+  name: api-gateway
+  image: incidenttracker.azurecr.io/api-gateway
+  tag: v1
+  replicas: 2
+  servicePort: 8000
+  containerPort: 8000
+
+frontend:
+  name: frontend-ui
+  image: incidenttracker.azurecr.io/frontend
+  tag: v2
+  replicas: 2
+  servicePort: 80
+  containerPort: 8080
 
 redis:
-  host: redis-svc
+  name: redis
+  image: redis:7
+  replicas: 1
+  servicePort: 6379
+  containerPort: 6379
 
-services:
-  api-gateway:
-    replicas: 2
-    imageTag: v1
-    port: 8000
-  frontend-ui:
-    replicas: 2
-    imageTag: v2
-    port: 8080
-  incidents-service:
-    replicas: 2
-    imageTag: v1
+resources:
+  apiGateway:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  frontend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  backend:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  redis:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+probes:
+  apiGateway:
+    readinessInitialDelaySeconds: 10
+    livenessInitialDelaySeconds: 15
+  frontend:
+    readinessInitialDelaySeconds: 10
+    livenessInitialDelaySeconds: 15
+  backend:
+    readinessInitialDelaySeconds: 10
+    livenessInitialDelaySeconds: 15
+
+backends:
+  - name: incidents-service
+    routePath: /incidents-service
+    image: incidenttracker.azurecr.io/incidents-service
+    tag: v1
     port: 8004
-  telemetry-service:
     replicas: 2
-    imageTag: v1
+  - name: telemetry-store
+    routePath: /telemetry-store
+    image: incidenttracker.azurecr.io/telemetry-service
+    tag: v1
     port: 8002
-  analysis-service:
     replicas: 2
-    imageTag: v1
+  - name: analysis-service
+    routePath: /analysis-service
+    image: incidenttracker.azurecr.io/analysis-service
+    tag: v1
     port: 8003
-  dependency-service:
     replicas: 2
-    imageTag: v1
+  - name: dependency-service
+    routePath: /dependency-service
+    image: incidenttracker.azurecr.io/dependency-service
+    tag: v1
     port: 8005
-  ingest-service:
     replicas: 2
-    imageTag: v1
+  - name: ingest-service
+    routePath: /ingest-service
+    image: incidenttracker.azurecr.io/ingest-service
+    tag: v1
     port: 8001
-  worker-service:
+    replicas: 2
+  - name: worker-service
+    image: incidenttracker.azurecr.io/worker-service
+    tag: v1
     replicas: 1
-    imageTag: v1
+    isWorker: true

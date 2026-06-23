@@ -1,11 +1,13 @@
+{{- $namespace := .Values.namespace | default .Release.Namespace -}}
+{{- $config := .Values.config | default dict -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: {{ .Values.global.environment }}
+  namespace: {{ $namespace }}
 data:
-  POSTGRES_DB: {{ .Values.postgres.db | quote }}
-  POSTGRES_HOST: {{ .Values.postgres.host | quote }}
-  REDIS_HOST: {{ .Values.redis.host | quote }}
-  API_GATEWAY_URL: "http://api-gateway-svc:8000"
-  FRONTEND_API_URL: "/api"
+  POSTGRES_DB: {{ get $config "POSTGRES_DB" | default "ki_engine" | quote }}
+  POSTGRES_HOST: {{ get $config "POSTGRES_HOST" | default "my-azure-db.postgres.database.azure.com" | quote }}
+  REDIS_HOST: {{ get $config "REDIS_HOST" | default "redis-svc" | quote }}
+  API_GATEWAY_URL: {{ get $config "API_GATEWAY_URL" | default "http://api-gateway-svc:8000" | quote }}
+  FRONTEND_API_URL: {{ get $config "FRONTEND_API_URL" | default "/api" | quote }}

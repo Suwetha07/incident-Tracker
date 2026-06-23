@@ -1,0 +1,78 @@
+{{- $namespace := .Values.namespace | default .Release.Namespace -}}
+{{- $resources := .Values.resources.backend | default dict -}}
+{{- $probes := .Values.probes.backend | default dict -}}
+{{- $secrets := .Values.secrets | default dict -}}
+{{- range .Values.backends }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: {{ $namespace }}
+spec:
+  replicas: {{ .replicas | default 2 }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: incident-tracker-sa
+      containers:
+        - name: {{ .name }}
+          image: {{ printf "%s:%s" .image (.tag | default "latest") }}
+          {{- if not .isWorker }}
+          ports:
+            - containerPort: {{ .port }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          {{- if not .isWorker }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .port }}
+            initialDelaySeconds: {{ get $probes "livenessInitialDelaySeconds" | default 15 }}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .port }}
+            initialDelaySeconds: {{ get $probes "readinessInitialDelaySeconds" | default 10 }}
+            periodSeconds: 10
+          {{- end }}
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ get $secrets "name" | default "azure-kv-secrets" }}
+---
+{{- if not .isWorker }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}-svc
+  namespace: {{ $namespace }}
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+    - port: {{ .port }}
+      targetPort: {{ .port }}
+  type: ClusterIP
+---
+{{- end }}
+{{- end }}

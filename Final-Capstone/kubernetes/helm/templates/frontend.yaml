@@ -1,0 +1,56 @@
+{{- $namespace := .Values.namespace | default .Release.Namespace -}}
+{{- $fe := .Values.frontend | default dict -}}
+{{- $resources := .Values.resources.frontend | default dict -}}
+{{- $probes := .Values.probes.frontend | default dict -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ get $fe "name" | default "frontend-ui" }}
+  namespace: {{ $namespace }}
+spec:
+  replicas: {{ get $fe "replicas" | default 2 }}
+  selector:
+    matchLabels:
+      app: {{ get $fe "name" | default "frontend-ui" }}
+  template:
+    metadata:
+      labels:
+        app: {{ get $fe "name" | default "frontend-ui" }}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: incident-tracker-sa
+      containers:
+        - name: {{ get $fe "name" | default "frontend-ui" }}
+          image: {{ printf "%s:%s" (get $fe "image") (get $fe "tag" | default "latest") }}
+          ports:
+            - containerPort: {{ get $fe "containerPort" | default 8080 }}
+          envFrom:
+            - configMapRef:
+                name: app-config
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: {{ get $fe "containerPort" | default 8080 }}
+            initialDelaySeconds: {{ get $probes "livenessInitialDelaySeconds" | default 15 }}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: {{ get $fe "containerPort" | default 8080 }}
+            initialDelaySeconds: {{ get $probes "readinessInitialDelaySeconds" | default 10 }}
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ get $fe "name" | default "frontend-ui" }}
+  namespace: {{ $namespace }}
+spec:
+  selector:
+    app: {{ get $fe "name" | default "frontend-ui" }}
+  ports:
+    - port: {{ get $fe "servicePort" | default 80 }}
+      targetPort: {{ get $fe "containerPort" | default 8080 }}
+  type: ClusterIP

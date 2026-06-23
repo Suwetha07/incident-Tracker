@@ -1,0 +1,70 @@
+{{- $namespace := .Values.namespace | default .Release.Namespace -}}
+{{- $api := .Values.apiGateway | default dict -}}
+{{- $resources := .Values.resources.apiGateway | default dict -}}
+{{- $probes := .Values.probes.apiGateway | default dict -}}
+{{- $secrets := .Values.secrets | default dict -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ get $api "name" | default "api-gateway" }}
+  namespace: {{ $namespace }}
+spec:
+  replicas: {{ get $api "replicas" | default 2 }}
+  selector:
+    matchLabels:
+      app: {{ get $api "name" | default "api-gateway" }}
+  template:
+    metadata:
+      labels:
+        app: {{ get $api "name" | default "api-gateway" }}
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: incident-tracker-sa
+      containers:
+        - name: {{ get $api "name" | default "api-gateway" }}
+          image: {{ printf "%s:%s" (get $api "image") (get $api "tag" | default "latest") }}
+          ports:
+            - containerPort: {{ get $api "containerPort" | default 8000 }}
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          resources:
+            {{- toYaml $resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ get $api "containerPort" | default 8000 }}
+            initialDelaySeconds: {{ get $probes "livenessInitialDelaySeconds" | default 15 }}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ get $api "containerPort" | default 8000 }}
+            initialDelaySeconds: {{ get $probes "readinessInitialDelaySeconds" | default 10 }}
+            periodSeconds: 10
+          volumeMounts:
+            - name: secrets-store-inline
+              mountPath: "/mnt/secrets-store"
+              readOnly: true
+      volumes:
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ get $secrets "name" | default "azure-kv-secrets" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ get $api "name" | default "api-gateway" }}-svc
+  namespace: {{ $namespace }}
+spec:
+  selector:
+    app: {{ get $api "name" | default "api-gateway" }}
+  ports:
+    - port: {{ get $api "servicePort" | default 8000 }}
+      targetPort: {{ get $api "containerPort" | default 8000 }}
+  type: ClusterIP
