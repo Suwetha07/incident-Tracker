@@ -390,5 +390,4 @@ async def proxy_incidents(path: str, request: Request):
 @app.api_route("/dependency-service/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
 async def proxy_dependency(path: str, request: Request):
     return await proxy_request("dependency-service", 8005, path, request)
-#   t r i g g e r   b u i l d  
- 
+# trigger build
