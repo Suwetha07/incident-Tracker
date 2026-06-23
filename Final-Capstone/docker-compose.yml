@@ -25,6 +25,10 @@ services:
       - redis
     volumes:
       - tmp-data:/app/.backend-logs/tmp
+    networks:
+      default:
+        aliases:
+          - api-gateway-svc
 
   ingest-service:
     build: ./services/ingest-service
