@@ -1,5 +1,4 @@
 name: CD Promote Pipeline
-
 on:
   workflow_run:
     workflows:
