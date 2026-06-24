@@ -133,39 +133,33 @@ jobs:
           git commit -m "promote($SERVICE): ${{ steps.devtag.outputs.dev_tag }} -> $PROD_TAG"
           git push
 
-      - name: Notify success
-        if: success()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "✅ [IncidentTracker CI] ${{ github.event.inputs.service_name }} production promotion succeeded"
-          to: ${{ secrets.NOTIFICATION_RECIPIENTS }}
-          from: IncidentTracker CI <${{ secrets.SMTP_USERNAME }}>
-          html_body: |
-            <h2>Production Promotion Succeeded</h2>
-            <p><strong>Service:</strong> ${{ github.event.inputs.service_name }}</p>
-            <p><strong>Dev source tag:</strong> ${{ steps.devtag.outputs.dev_tag }}</p>
-            <p><strong>Production tag:</strong> ${{ github.event.inputs.version }}</p>
-            <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
-            <p><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View workflow run</a></p>
-
-      - name: Notify failure
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_SERVER }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "❌ [IncidentTracker CI] ${{ github.event.inputs.service_name }} production promotion failed"
-          to: ${{ secrets.NOTIFICATION_RECIPIENTS }}
-          from: IncidentTracker CI <${{ secrets.SMTP_USERNAME }}>
-          html_body: |
-            <h2>Production Promotion Failed</h2>
-            <p><strong>Service:</strong> ${{ github.event.inputs.service_name }}</p>
-            <p><strong>Requested production tag:</strong> ${{ github.event.inputs.version }}</p>
-            <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
-            <p><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View workflow run</a></p>
+      - name: Slack Notification
+        if: always()
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+          SERVICE: ${{ github.event.inputs.service_name }}
+          DEV_TAG: ${{ steps.devtag.outputs.dev_tag }}
+          PROD_TAG: ${{ github.event.inputs.version }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then
+            MESSAGE="🚀 *Production Promotion Success* 🚀\n*Service:* \`${SERVICE}\`\n*Dev source tag:* \`${DEV_TAG}\`\n*Production tag:* \`${PROD_TAG}\`\n*Triggered by:* \`${{ github.actor }}\`\nPromotion completed successfully! ✅"
+            echo "### Production Promotion Success ✅" >> $GITHUB_STEP_SUMMARY
+            echo "- **Service:** $SERVICE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Dev Source Tag:** $DEV_TAG" >> $GITHUB_STEP_SUMMARY
+            echo "- **Production Tag:** $PROD_TAG" >> $GITHUB_STEP_SUMMARY
+            echo "- **Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          else
+            MESSAGE="❌ *Production Promotion Failure* ❌\n*Service:* \`${SERVICE}\`\n*Requested production tag:* \`${PROD_TAG}\`\n*Triggered by:* \`${{ github.actor }}\`\nPromotion failed. Please check the workflow logs."
+            echo "### Production Promotion Failure ❌" >> $GITHUB_STEP_SUMMARY
+            echo "- **Service:** $SERVICE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Requested Production Tag:** $PROD_TAG" >> $GITHUB_STEP_SUMMARY
+            echo "- **Triggered By:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"$MESSAGE\"}" $SLACK_WEBHOOK_URL
+          else
+            echo "Slack Webhook URL is not set. Skipping Slack notification."
+          fi
