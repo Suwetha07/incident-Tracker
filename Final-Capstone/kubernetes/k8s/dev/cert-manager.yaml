@@ -27,4 +27,4 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-  - suwethaskill.shop
+  - tracker.suwethaskill.shop
