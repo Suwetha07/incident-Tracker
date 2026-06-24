@@ -48,7 +48,7 @@ jobs:
   promote:
     name: Promote & Deploy
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') }}
     permissions:
       contents: write
     steps:
@@ -60,6 +60,9 @@ jobs:
       - name: Determine Service and Image Name
         shell: bash
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_NAME: ${{ github.event.workflow_run.name }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           SECRET_PROVIDER: ${{ secrets.CLOUD_PROVIDER }}
           KUBECONFIG_SECRET: ${{ secrets.KUBECONFIG }}
         run: |
@@ -74,8 +77,8 @@ jobs:
           echo "CLOUD_PROVIDER=$PROVIDER" >> $GITHUB_ENV
           echo "Resolved Cloud Provider: $PROVIDER"
 
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            WORKFLOW_NAME="$WORKFLOW_RUN_NAME"
             echo "Triggered by workflow: $WORKFLOW_NAME"
             case "$WORKFLOW_NAME" in
               "Build Web App")
@@ -115,7 +118,7 @@ jobs:
                 exit 1
                 ;;
             esac
-            TAG="${{ github.event.workflow_run.head_sha }}"
+            TAG="$WORKFLOW_RUN_SHA"
             ENV_DIR="dev"
           else
             SERVICE_NAME="${{ github.event.inputs.service }}"
