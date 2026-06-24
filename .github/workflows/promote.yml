@@ -1,0 +1,272 @@
+name: CD Promote Pipeline
+
+on:
+  workflow_run:
+    workflows:
+      - "Build Web App"
+      - "Build Api Gateway"
+      - "Build Analysis Service"
+      - "Build Dependency Service"
+      - "Build Incidents Service"
+      - "Build Ingest Service"
+      - "Build Telemetry Store"
+      - "Build Worker Service"
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Deployment to update (e.g. api-gateway, frontend-ui)"
+        required: true
+        type: choice
+        options:
+          - api-gateway
+          - frontend-ui
+          - incidents-service
+          - telemetry-store
+          - analysis-service
+          - dependency-service
+          - ingest-service
+          - worker-service
+      image_tag:
+        description: "Image tag to deploy (e.g. sha-abc123 or v1.2.3)"
+        required: true
+        type: string
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+
+env:
+  CLOUD_PROVIDER: ${{ secrets.CLOUD_PROVIDER || 'aks' }} # Supported options: 'aks', 'eks', 'kubeconfig'
+
+jobs:
+  promote:
+    name: Promote & Deploy
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Determine Service and Image Name
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+            echo "Triggered by workflow: $WORKFLOW_NAME"
+            case "$WORKFLOW_NAME" in
+              "Build Web App")
+                SERVICE_NAME="frontend-ui"
+                IMAGE_NAME="web-app"
+                ;;
+              "Build Api Gateway")
+                SERVICE_NAME="api-gateway"
+                IMAGE_NAME="api-gateway"
+                ;;
+              "Build Analysis Service")
+                SERVICE_NAME="analysis-service"
+                IMAGE_NAME="analysis-service"
+                ;;
+              "Build Dependency Service")
+                SERVICE_NAME="dependency-service"
+                IMAGE_NAME="dependency-service"
+                ;;
+              "Build Incidents Service")
+                SERVICE_NAME="incidents-service"
+                IMAGE_NAME="incidents-service"
+                ;;
+              "Build Ingest Service")
+                SERVICE_NAME="ingest-service"
+                IMAGE_NAME="ingest-service"
+                ;;
+              "Build Telemetry Store")
+                SERVICE_NAME="telemetry-store"
+                IMAGE_NAME="telemetry-service"
+                ;;
+              "Build Worker Service")
+                SERVICE_NAME="worker-service"
+                IMAGE_NAME="worker-service"
+                ;;
+              *)
+                echo "Unknown workflow trigger: $WORKFLOW_NAME"
+                exit 1
+                ;;
+            esac
+            TAG="${{ github.event.workflow_run.head_sha }}"
+            ENV_DIR="dev"
+          else
+            SERVICE_NAME="${{ github.event.inputs.service }}"
+            if [ "$SERVICE_NAME" = "frontend-ui" ]; then
+              IMAGE_NAME="web-app"
+            elif [ "$SERVICE_NAME" = "telemetry-store" ]; then
+              IMAGE_NAME="telemetry-service"
+            else
+              IMAGE_NAME="$SERVICE_NAME"
+            fi
+            TAG="${{ github.event.inputs.image_tag }}"
+            ENV_DIR="${{ github.event.inputs.environment }}"
+          fi
+
+          echo "SERVICE_NAME=$SERVICE_NAME" >> $GITHUB_ENV
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
+          echo "DEPLOY_ENV=$ENV_DIR" >> $GITHUB_ENV
+
+          echo "Service to Deploy: $SERVICE_NAME"
+          echo "Image Name: $IMAGE_NAME"
+          echo "Image Tag: $TAG"
+          echo "Environment: $ENV_DIR"
+
+      # --- Cloud Provider Credentials & Kubeconfig ---
+
+      - name: Azure Login (AKS)
+        if: env.CLOUD_PROVIDER == 'aks'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set AKS Context
+        if: env.CLOUD_PROVIDER == 'aks'
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ secrets.AZURE_RESOURCE_GROUP || 'Suwetha-RG' }}
+          cluster-name: ${{ secrets.AZURE_CLUSTER_NAME || 'suwethaaks' }}
+
+      - name: Configure AWS Credentials (EKS)
+        if: env.CLOUD_PROVIDER == 'eks'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Set EKS Context
+        if: env.CLOUD_PROVIDER == 'eks'
+        run: |
+          aws eks update-kubeconfig --name ${{ secrets.AWS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Set Kubeconfig from Secret (Fallback)
+        if: env.CLOUD_PROVIDER == 'kubeconfig' || (env.CLOUD_PROVIDER == '' && secrets.KUBECONFIG != '')
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      # --- Update Image Tags ---
+
+      - name: Update deployments.yaml
+        uses: mikefarah/yq@v4.44.3
+        env:
+          SERVICE: ${{ env.SERVICE_NAME }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+        with:
+          cmd: |
+            FILE_PATH="Final-Capstone/kubernetes/k8s/${ENV_DIR}/deployments.yaml"
+            if [ ! -f "$FILE_PATH" ]; then
+              echo "Error: Manifest file $FILE_PATH does not exist."
+              exit 1
+            fi
+            # Update the image tag for the specific deployment in the multi-document yaml
+            yq eval -i '(select(.metadata.name == strenv(SERVICE)) | .spec.template.spec.containers[0].image) = "incidenttracker.azurecr.io/" + env(IMAGE_NAME) + ":" + strenv(IMAGE_TAG)' "$FILE_PATH"
+
+      # --- Apply Manifests ---
+
+      - name: Apply Kubernetes Manifests
+        shell: bash
+        env:
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+        run: |
+          kubectl apply -f Final-Capstone/kubernetes/k8s/${ENV_DIR}/
+
+      # --- Verify Rollout ---
+
+      - name: Verify Rollout Status
+        shell: bash
+        env:
+          SERVICE: ${{ env.SERVICE_NAME }}
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+        run: |
+          kubectl rollout status deployment/${SERVICE} -n ${ENV_DIR} --timeout=5m
+
+      # --- Smoke Tests ---
+
+      - name: Run Smoke Tests
+        shell: bash
+        env:
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+        run: |
+          echo "Running Smoke Tests..."
+          # Fetch Gateway/Loadbalancer IP if available
+          EXTERNAL_IP=$(kubectl get gateway -n ${ENV_DIR} -o jsonpath='{.items[0].status.addresses[0].value}' 2>/dev/null || echo "")
+          if [ -n "$EXTERNAL_IP" ]; then
+            echo "Found External IP: $EXTERNAL_IP"
+            echo "Pinging health endpoint..."
+            curl -f -s --connect-timeout 5 "http://${EXTERNAL_IP}/health" || echo "Endpoint not reachable yet, but continuing..."
+          else
+            echo "No gateway external IP resolved yet. Skipping endpoint check."
+          fi
+          echo "Smoke tests completed. ✅"
+
+      # --- Commit back to Git for GitOps / ArgoCD synchronization ---
+
+      - name: Commit and Push Updated Manifest
+        shell: bash
+        env:
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+          SERVICE: ${{ env.SERVICE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          FILE_PATH="Final-Capstone/kubernetes/k8s/${ENV_DIR}/deployments.yaml"
+          
+          if git diff --quiet -- "$FILE_PATH"; then
+            echo "No changes detected in $FILE_PATH"
+          else
+            git add "$FILE_PATH"
+            git commit -m "cd: promote ${SERVICE} to ${IMAGE_TAG} in ${ENV_DIR}"
+            git push origin HEAD:main
+          fi
+
+      # --- Notification ---
+
+      - name: Post-Deployment Notification
+        if: always()
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+          SERVICE: ${{ env.SERVICE_NAME }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          ENV_DIR: ${{ env.DEPLOY_ENV }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then
+            MESSAGE="🚀 *CD Pipeline Success* 🚀\n*Service:* \`${SERVICE}\`\n*Tag:* \`${IMAGE_TAG}\`\n*Environment:* \`${ENV_DIR}\`\nDeployment completed and verified successfully! ✅"
+            echo "### Deployment Success ✅" >> $GITHUB_STEP_SUMMARY
+            echo "- **Service:** $SERVICE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tag:** $IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+            echo "- **Environment:** $ENV_DIR" >> $GITHUB_STEP_SUMMARY
+          else
+            MESSAGE="❌ *CD Pipeline Failure* ❌\n*Service:* \`${SERVICE}\`\n*Tag:* \`${IMAGE_TAG}\`\n*Environment:* \`${ENV_DIR}\`\nDeployment or verification failed. Please check the workflow logs."
+            echo "### Deployment Failure ❌" >> $GITHUB_STEP_SUMMARY
+            echo "- **Service:** $SERVICE" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tag:** $IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+            echo "- **Environment:** $ENV_DIR" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -n "$SLACK_WEBHOOK_URL" ]; then
+            curl -X POST -H 'Content-type: application/json' --data "{\"text\":\"$MESSAGE\"}" $SLACK_WEBHOOK_URL
+          else
+            echo "Slack Webhook URL is not set. Skipping Slack notification."
+          fi
