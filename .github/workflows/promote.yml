@@ -157,19 +157,6 @@ jobs:
           resource-group: ${{ secrets.AZURE_RESOURCE_GROUP || 'Suwetha-RG' }}
           cluster-name: ${{ secrets.AZURE_CLUSTER_NAME || 'suwethaaks' }}
 
-      - name: Configure AWS Credentials (EKS)
-        if: env.CLOUD_PROVIDER == 'eks'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
-
-      - name: Set EKS Context
-        if: env.CLOUD_PROVIDER == 'eks'
-        run: |
-          aws eks update-kubeconfig --name ${{ secrets.AWS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
-
       - name: Set Kubeconfig from Secret (Fallback)
         if: env.CLOUD_PROVIDER == 'kubeconfig'
         uses: azure/k8s-set-context@v3
