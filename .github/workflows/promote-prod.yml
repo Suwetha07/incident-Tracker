@@ -1,10 +1,10 @@
-name: Promote Image To Prod
+name: Promote Service to Production
 
 on:
   workflow_dispatch:
     inputs:
-      service:
-        description: "Deployment to update in prod/deployments.yaml"
+      service_name:
+        description: "Select service to promote"
         required: true
         type: choice
         options:
@@ -16,76 +16,154 @@ on:
           - dependency-service
           - ingest-service
           - worker-service
-      image_tag:
-        description: "Image tag to promote (example: sha-abc123 or v1.2.3)"
+
+      version:
+        description: "New production version tag, example: v1.0.0"
         required: true
         type: string
 
-concurrency:
-  group: prod-promotion-${{ github.event.inputs.service }}
-  cancel-in-progress: false
-
 jobs:
-  approval_gate:
-    name: Manual Approval Gate
+  promote:
     runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Approval Confirmed
-        run: echo "Production approval granted."
 
-  update_values_prod:
-    name: Update prod/deployments.yaml
-    runs-on: ubuntu-latest
-    needs: approval_gate
-    permissions:
-      contents: write
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Validate Inputs
-        shell: bash
-        env:
-          SERVICE: ${{ github.event.inputs.service }}
-          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+      - name: Validate version format
         run: |
-          if [ -z "$SERVICE" ] || [ -z "$IMAGE_TAG" ]; then
-            echo "service and image_tag are required"
+          if ! [[ "${{ github.event.inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: version must match vX.Y.Z (e.g. v1.2.3)"
             exit 1
           fi
 
-      - name: Update deployments.yaml
-        uses: mikefarah/yq@v4.44.3
-        env:
-          SERVICE: ${{ github.event.inputs.service }}
-          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
-        with:
-          cmd: |
-            if [ ! -f "Final-Capstone/kubernetes/prod/deployments.yaml" ]; then
-              echo "Error: Final-Capstone/kubernetes/prod/deployments.yaml does not exist yet."
-              exit 1
-            fi
-            if [ "$SERVICE" = "frontend-ui" ]; then
-              IMAGE_NAME="web-app"
-            else
-              IMAGE_NAME="$SERVICE"
-            fi
-            # Update the image tag for the specific deployment in the multi-document yaml
-            yq eval -i '(select(.metadata.name == strenv(SERVICE)) | .spec.template.spec.containers[0].image) = "incidenttracker.azurecr.io/" + env(IMAGE_NAME) + ":" + strenv(IMAGE_TAG)' Final-Capstone/kubernetes/prod/deployments.yaml
-
-      - name: Commit and Push
-        shell: bash
+      - name: Install yq
         run: |
-          if git diff --quiet -- Final-Capstone/kubernetes/prod/deployments.yaml; then
-            echo "No changes detected in prod/deployments.yaml"
-            exit 0
+          if ! command -v yq &> /dev/null; then
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Final-Capstone/kubernetes/prod/deployments.yaml
-          git commit -m "promote(prod): ${{ github.event.inputs.service }} -> ${{ github.event.inputs.image_tag }}"
-          git push origin HEAD:main
+      - name: Read dev image tag
+        id: devtag
+        run: |
+          SERVICE="${{ github.event.inputs.service_name }}"
+          DEV_FILE="Final-Capstone/kubernetes/k8s/dev/deployments.yaml"
+          if [ ! -f "$DEV_FILE" ]; then
+            echo "ERROR: $DEV_FILE not found in repository"
+            exit 1
+          fi
+          
+          # Extract the image from dev deployments
+          IMAGE_PATH=$(yq eval "select(.metadata.name == \"$SERVICE\") | .spec.template.spec.containers[0].image" "$DEV_FILE")
+          if [ -z "$IMAGE_PATH" ] || [ "$IMAGE_PATH" = "null" ]; then
+            echo "ERROR: Could not find image for service $SERVICE in $DEV_FILE"
+            exit 1
+          fi
+          
+          # Extract tag and base image
+          DEV_TAG=$(echo "$IMAGE_PATH" | awk -F: '{print $2}')
+          BASE_IMAGE=$(echo "$IMAGE_PATH" | awk -F: '{print $1}')
+          
+          if [ -z "$DEV_TAG" ] || [ "$DEV_TAG" = "null" ]; then
+            echo "ERROR: image tag not found for $SERVICE in $DEV_FILE"
+            exit 1
+          fi
+          
+          echo "dev_tag=$DEV_TAG" >> "$GITHUB_OUTPUT"
+          echo "base_image=$BASE_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Dev tag found: $DEV_TAG for image: $BASE_IMAGE"
+
+      - name: Docker login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER || 'incidenttracker.azurecr.io' }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Pull dev image, retag and push prod image
+        run: |
+          SERVICE="${{ github.event.inputs.service_name }}"
+          DEV_TAG="${{ steps.devtag.outputs.dev_tag }}"
+          PROD_TAG="${{ github.event.inputs.version }}"
+          BASE_IMAGE="${{ steps.devtag.outputs.base_image }}"
+          
+          SOURCE_IMAGE="$BASE_IMAGE:$DEV_TAG"
+          PROD_IMAGE="$BASE_IMAGE:$PROD_TAG"
+          
+          echo "Pulling source image: $SOURCE_IMAGE"
+          docker pull "$SOURCE_IMAGE"
+          echo "Retagging image: $PROD_IMAGE"
+          docker tag "$SOURCE_IMAGE" "$PROD_IMAGE"
+          echo "Pushing prod image: $PROD_IMAGE"
+          docker push "$PROD_IMAGE"
+
+      - name: Update prod deployments file
+        run: |
+          SERVICE="${{ github.event.inputs.service_name }}"
+          PROD_TAG="${{ github.event.inputs.version }}"
+          BASE_IMAGE="${{ steps.devtag.outputs.base_image }}"
+          PROD_FILE="Final-Capstone/kubernetes/k8s/prod/deployments.yaml"
+          
+          if [ ! -f "$PROD_FILE" ]; then
+            echo "ERROR: $PROD_FILE not found in repository"
+            exit 1
+          fi
+          
+          OLD_PROD_TAG=$(yq eval "select(.metadata.name == \"$SERVICE\") | .spec.template.spec.containers[0].image" "$PROD_FILE" | awk -F: '{print $2}')
+          echo "Service: $SERVICE"
+          echo "Old prod tag: $OLD_PROD_TAG"
+          echo "New prod tag: $PROD_TAG"
+          
+          # Update deployments.yaml for production
+          yq eval -i "(select(.metadata.name == \"$SERVICE\") | .spec.template.spec.containers[0].image) = \"$BASE_IMAGE:$PROD_TAG\"" "$PROD_FILE"
+          
+          git config user.name "incidenttracker-ci-bot"
+          git config user.email "ci-bot@incidenttracker.local"
+          if git diff --quiet -- "$PROD_FILE"; then
+            echo "No change. $SERVICE prod already has tag $PROD_TAG"
+            exit 0
+          fi
+          
+          git add "$PROD_FILE"
+          git commit -m "promote($SERVICE): ${{ steps.devtag.outputs.dev_tag }} -> $PROD_TAG"
+          git push
+
+      - name: Notify success
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "✅ [IncidentTracker CI] ${{ github.event.inputs.service_name }} production promotion succeeded"
+          to: ${{ secrets.NOTIFICATION_RECIPIENTS }}
+          from: IncidentTracker CI <${{ secrets.SMTP_USERNAME }}>
+          html_body: |
+            <h2>Production Promotion Succeeded</h2>
+            <p><strong>Service:</strong> ${{ github.event.inputs.service_name }}</p>
+            <p><strong>Dev source tag:</strong> ${{ steps.devtag.outputs.dev_tag }}</p>
+            <p><strong>Production tag:</strong> ${{ github.event.inputs.version }}</p>
+            <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
+            <p><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View workflow run</a></p>
+
+      - name: Notify failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "❌ [IncidentTracker CI] ${{ github.event.inputs.service_name }} production promotion failed"
+          to: ${{ secrets.NOTIFICATION_RECIPIENTS }}
+          from: IncidentTracker CI <${{ secrets.SMTP_USERNAME }}>
+          html_body: |
+            <h2>Production Promotion Failed</h2>
+            <p><strong>Service:</strong> ${{ github.event.inputs.service_name }}</p>
+            <p><strong>Requested production tag:</strong> ${{ github.event.inputs.version }}</p>
+            <p><strong>Triggered by:</strong> ${{ github.actor }}</p>
+            <p><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View workflow run</a></p>
