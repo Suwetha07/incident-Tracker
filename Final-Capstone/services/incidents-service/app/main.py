@@ -33,6 +33,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def extract_kubeconfig(request: Request, call_next):
+    kubeconfig_header = request.headers.get("X-Kubeconfig")
+    if kubeconfig_header:
+        try:
+            import base64
+            from pathlib import Path
+            WORKSPACE_TEMP_DIR = Path(__file__).resolve().parents[1] / ".backend-logs" / "tmp"
+            WORKSPACE_TEMP_DIR.mkdir(parents=True, exist_ok=True)
+            kubeconfig_path = WORKSPACE_TEMP_DIR / "active_kubeconfig.yaml"
+            try:
+                decoded = base64.b64decode(kubeconfig_header).decode("utf-8")
+                if "apiVersion" in decoded:
+                    kubeconfig_path.write_text(decoded, encoding="utf-8")
+            except Exception:
+                if "apiVersion" in kubeconfig_header:
+                    kubeconfig_path.write_text(kubeconfig_header, encoding="utf-8")
+        except Exception:
+            pass
+    response = await call_next(request)
+    return response
+
 # Mock databases fallback
 incidents_db = [
     {

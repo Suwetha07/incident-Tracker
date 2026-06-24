@@ -8,3 +8,6 @@ urllib3>=2.7.0
 azure-core>=1.38.0
 pyjwt>=2.13.0
 starlette>=0.45.1
+azure-storage-blob>=12.19.0
+psycopg2-binary>=2.9.9
+

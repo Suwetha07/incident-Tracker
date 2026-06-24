@@ -46,7 +46,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: api-gateway
-          image: incidenttracker.azurecr.io/api-gateway:v1
+          image: incidenttracker.azurecr.io/api-gateway:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
@@ -105,7 +105,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: frontend-ui
-          image: incidenttracker.azurecr.io/web-app:dfcdca3680287dd4abf20436d10c01fa9b360fe1
+          image: incidenttracker.azurecr.io/web-app:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -151,7 +151,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: incidents-service
-          image: incidenttracker.azurecr.io/incidents-service:v1
+          image: incidenttracker.azurecr.io/incidents-service:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8004
@@ -210,7 +210,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: telemetry-store
-          image: incidenttracker.azurecr.io/telemetry-service:v1
+          image: incidenttracker.azurecr.io/telemetry-service:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8002
@@ -328,7 +328,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: dependency-service
-          image: incidenttracker.azurecr.io/dependency-service:v1
+          image: incidenttracker.azurecr.io/dependency-service:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8005
@@ -387,7 +387,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: ingest-service
-          image: incidenttracker.azurecr.io/ingest-service:v1
+          image: incidenttracker.azurecr.io/ingest-service:v2
           imagePullPolicy: Always
           ports:
             - containerPort: 8001

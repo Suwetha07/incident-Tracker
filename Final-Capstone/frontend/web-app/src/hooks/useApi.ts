@@ -32,6 +32,9 @@ const apiCall = async (
       if (activeCluster.clusterName) {
         clusterHeaders['X-Cluster-Name'] = activeCluster.clusterName;
       }
+      if (activeCluster.kubeconfigContent) {
+        clusterHeaders['X-Kubeconfig'] = btoa(unescape(encodeURIComponent(activeCluster.kubeconfigContent)));
+      }
     } catch (e) {}
   }
 

@@ -1,11 +1,14 @@
 import base64
+import datetime
 import os
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
 import httpx
+import psycopg2
 import yaml
+from azure.storage.blob import BlobServiceClient
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -21,6 +24,78 @@ app.add_middleware(
 )
 
 WORKSPACE_TEMP_DIR = Path(__file__).resolve().parents[1] / ".backend-logs" / "tmp"
+
+# Azure Blob Storage Configuration
+AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+CONTAINER_NAME = "kubeconfiguploads"
+
+# PostgreSQL Configuration
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST")
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "ki_engine")
+POSTGRES_USER = os.environ.get("POSTGRES_USER")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD")
+
+def store_kubeconfig_and_metadata(cluster_name: str, server_url: str, k8s_version: str, kubeconfig_content: str):
+    blob_url = "local-storage"
+    
+    # 1. Upload to Azure Blob Storage
+    if AZURE_STORAGE_CONNECTION_STRING:
+        try:
+            blob_service_client = BlobServiceClient.from_connection_string(AZURE_STORAGE_CONNECTION_STRING)
+            container_client = blob_service_client.get_container_client(CONTAINER_NAME)
+            
+            if not container_client.exists():
+                container_client.create_container()
+                
+            timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            safe_cluster_name = "".join(c for c in cluster_name if c.isalnum() or c in ("-", "_")).rstrip()
+            blob_name = f"{safe_cluster_name}_{timestamp}.yaml"
+            
+            blob_client = container_client.get_blob_client(blob_name)
+            blob_client.upload_blob(kubeconfig_content.encode("utf-8"), overwrite=True)
+            blob_url = blob_client.url
+            print(f"Successfully uploaded kubeconfig to Azure Storage as {blob_name}")
+        except Exception as e:
+            print(f"Error uploading to Azure Storage: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to upload kubeconfig to Azure Storage: {e}")
+            
+    # 2. Store in PostgreSQL
+    if POSTGRES_HOST and POSTGRES_USER and POSTGRES_PASSWORD:
+        try:
+            conn = psycopg2.connect(
+                host=POSTGRES_HOST,
+                database=POSTGRES_DB,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                connect_timeout=10
+            )
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS kubeconfig_uploads (
+                    id SERIAL PRIMARY KEY,
+                    cluster_name VARCHAR(255),
+                    server_url VARCHAR(255),
+                    k8s_version VARCHAR(50),
+                    blob_url VARCHAR(1000),
+                    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
+            
+            cursor.execute("""
+                INSERT INTO kubeconfig_uploads (cluster_name, server_url, k8s_version, blob_url)
+                VALUES (%s, %s, %s, %s);
+            """, (cluster_name, server_url, k8s_version, blob_url))
+            conn.commit()
+            
+            cursor.close()
+            conn.close()
+            print("Successfully inserted kubeconfig metadata into PostgreSQL")
+        except Exception as e:
+            print(f"Error connecting/writing to PostgreSQL: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to save kubeconfig metadata to PostgreSQL: {e}")
+
 
 
 @app.get("/health")
@@ -318,6 +393,15 @@ async def validate_kubeconfig(request: KubeconfigValidationRequest):
             status_code=500,
             detail=f"Failed to store kubeconfig on backend: {exc}"
         ) from exc
+
+    # Store kubeconfig in Azure Storage and metadata in PostgreSQL
+    store_kubeconfig_and_metadata(
+        cluster_name=cluster_name or current_context_name or "unknown-cluster",
+        server_url=server,
+        k8s_version=version.get("gitVersion") or "unknown",
+        kubeconfig_content=request.kubeconfig
+    )
+
 
     return {
         "valid": True,
