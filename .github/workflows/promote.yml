@@ -42,7 +42,7 @@ on:
         default: dev
 
 env:
-  CLOUD_PROVIDER: ${{ secrets.CLOUD_PROVIDER || 'aks' }} # Supported options: 'aks', 'eks', 'kubeconfig'
+  CLOUD_PROVIDER: ""
 
 jobs:
   promote:
@@ -59,7 +59,21 @@ jobs:
 
       - name: Determine Service and Image Name
         shell: bash
+        env:
+          SECRET_PROVIDER: ${{ secrets.CLOUD_PROVIDER }}
+          KUBECONFIG_SECRET: ${{ secrets.KUBECONFIG }}
         run: |
+          # Resolve cloud provider
+          if [ -n "$SECRET_PROVIDER" ]; then
+            PROVIDER="$SECRET_PROVIDER"
+          elif [ -n "$KUBECONFIG_SECRET" ]; then
+            PROVIDER="kubeconfig"
+          else
+            PROVIDER="aks"
+          fi
+          echo "CLOUD_PROVIDER=$PROVIDER" >> $GITHUB_ENV
+          echo "Resolved Cloud Provider: $PROVIDER"
+
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
             echo "Triggered by workflow: $WORKFLOW_NAME"
@@ -155,7 +169,7 @@ jobs:
           aws eks update-kubeconfig --name ${{ secrets.AWS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION || 'us-east-1' }}
 
       - name: Set Kubeconfig from Secret (Fallback)
-        if: env.CLOUD_PROVIDER == 'kubeconfig' || (env.CLOUD_PROVIDER == '' && secrets.KUBECONFIG != '')
+        if: env.CLOUD_PROVIDER == 'kubeconfig'
         uses: azure/k8s-set-context@v3
         with:
           method: kubeconfig
