@@ -20,22 +20,7 @@ const getAccounts = (): Account[] => {
   return raw ? JSON.parse(raw) : [];
 };
 
-type EntraClaims = {
-  name?: string;
-  preferred_username?: string;
-  email?: string;
-  oid?: string;
-};
 
-const decodeJwtPayload = (token: string): EntraClaims => {
-  const payload = token.split('.')[1];
-  if (!payload) return {};
-
-  const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const decodedPayload = window.atob(normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '='));
-
-  return JSON.parse(decodedPayload) as EntraClaims;
-};
 
 export const Auth: React.FC = () => {
   const navigate = useNavigate();
@@ -54,56 +39,7 @@ export const Auth: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    const idToken = params.get('id_token');
-    const error = params.get('error_description') || params.get('error');
 
-    if (error) {
-      const isIdTokenDisabled = error.includes('AADSTS700054');
-      showToast({
-        type: 'error',
-        title: isIdTokenDisabled ? 'Enable ID tokens in Azure' : 'Microsoft login failed',
-        message: isIdTokenDisabled
-          ? 'In App Registration > Authentication, enable ID tokens for implicit and hybrid flows.'
-          : error,
-      });
-      window.history.replaceState(null, '', window.location.pathname);
-      return;
-    }
-
-    if (!idToken) return;
-
-    try {
-      const claims = decodeJwtPayload(idToken);
-      const email = claims.preferred_username || claims.email || '';
-
-      localStorage.setItem('token', idToken);
-      localStorage.setItem(
-        'user',
-        JSON.stringify({
-          name: claims.name || email || 'Microsoft Entra User',
-          username: email || claims.oid || 'entra-user',
-          email,
-          organization: 'Microsoft Entra ID',
-          designation: 'DevOps Engineer',
-        })
-      );
-      window.history.replaceState(null, '', window.location.pathname);
-      showToast({
-        type: 'success',
-        title: 'Microsoft login successful',
-        message: claims.name || email || 'Signed in with Microsoft Entra ID.',
-      });
-      navigate('/dashboard');
-    } catch {
-      showToast({
-        type: 'error',
-        title: 'Microsoft login failed',
-        message: 'Unable to read Microsoft identity token.',
-      });
-    }
-  }, [navigate]);
 
   const createAccount = () => {
     setMessage('');
@@ -200,32 +136,7 @@ export const Auth: React.FC = () => {
     navigate('/dashboard');
   };
 
-  const loginWithEntra = () => {
-    const tenantId = import.meta.env.VITE_ENTRA_TENANT_ID || 'common';
-    const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/auth`;
 
-    if (!clientId) {
-      showToast({
-        type: 'error',
-        title: 'Microsoft Entra ID not configured',
-        message: 'Add VITE_ENTRA_CLIENT_ID in frontend/web-app/.env.local.',
-      });
-      return;
-    }
-
-    const nonce = crypto.randomUUID();
-    sessionStorage.setItem('entra_nonce', nonce);
-    const authUrl = new URL(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`);
-    authUrl.searchParams.set('client_id', clientId);
-    authUrl.searchParams.set('response_type', 'id_token');
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('response_mode', 'fragment');
-    authUrl.searchParams.set('scope', 'openid profile email');
-    authUrl.searchParams.set('nonce', nonce);
-
-    window.location.href = authUrl.toString();
-  };
 
   return (
     <div className="auth-blue-bg min-h-screen px-6 py-10 text-white">
@@ -283,24 +194,7 @@ export const Auth: React.FC = () => {
                 </button>
               </p>
 
-              <div className="flex items-center gap-5">
-                <div className="h-px flex-1 bg-white/60" />
-                <p className="text-sm font-extrabold uppercase text-white">Or login with</p>
-                <div className="h-px flex-1 bg-white/60" />
-              </div>
 
-              <button
-                className="mx-auto flex h-11 min-w-64 items-center justify-center gap-3 rounded-2xl bg-white px-5 text-sm font-extrabold text-gray-700 shadow-[0_8px_18px_rgba(0,0,0,0.22)] transition hover:bg-gray-100"
-                onClick={loginWithEntra}
-              >
-                <span className="grid h-5 w-5 grid-cols-2 gap-0.5">
-                  <span className="bg-[#f25022]" />
-                  <span className="bg-[#7fba00]" />
-                  <span className="bg-[#00a4ef]" />
-                  <span className="bg-[#ffb900]" />
-                </span>
-                Microsoft Entra ID
-              </button>
             </div>
           ) : (
             <div className="rounded-3xl border border-white/20 bg-white/15 p-6 shadow-[0_18px_40px_rgba(0,0,0,0.24)] backdrop-blur">
