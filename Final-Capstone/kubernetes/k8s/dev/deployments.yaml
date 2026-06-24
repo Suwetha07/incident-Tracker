@@ -110,7 +110,7 @@ spec:
       serviceAccountName: incident-tracker-sa
       containers:
         - name: frontend-ui
-          image: incidenttracker.azurecr.io/web-app:1041f5e0be697ad108785642a8b948cfbe2c246f
+          image: incidenttracker.azurecr.io/web-app:dfcdca3680287dd4abf20436d10c01fa9b360fe1
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
