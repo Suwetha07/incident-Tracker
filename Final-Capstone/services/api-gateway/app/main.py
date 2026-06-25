@@ -239,6 +239,7 @@ async def validate_cluster(request: ClusterValidationRequest):
     properties = cluster.get("properties", {})
     fqdn = properties.get("fqdn")
 
+    kubeconfig_str = ""
     if fqdn and access_token:
         dynamic_kubeconfig = {
             "apiVersion": "v1",
@@ -271,10 +272,21 @@ async def validate_cluster(request: ClusterValidationRequest):
                 }
             ]
         }
+        kubeconfig_str = yaml.safe_dump(dynamic_kubeconfig)
         try:
             WORKSPACE_TEMP_DIR.mkdir(parents=True, exist_ok=True)
             kubeconfig_path = WORKSPACE_TEMP_DIR / "active_kubeconfig.yaml"
-            kubeconfig_path.write_text(yaml.safe_dump(dynamic_kubeconfig), encoding="utf-8")
+            kubeconfig_path.write_text(kubeconfig_str, encoding="utf-8")
+        except Exception:
+            pass
+
+        try:
+            store_kubeconfig_and_metadata(
+                cluster_name=request.aksClusterName or "unknown-cluster",
+                server_url=f"https://{fqdn}",
+                k8s_version=properties.get("kubernetesVersion") or "unknown",
+                kubeconfig_content=kubeconfig_str
+            )
         except Exception:
             pass
 
@@ -288,6 +300,7 @@ async def validate_cluster(request: ClusterValidationRequest):
             "provisioningState": properties.get("provisioningState"),
             "fqdn": properties.get("fqdn"),
             "kubernetesVersion": properties.get("kubernetesVersion"),
+            "kubeconfig": kubeconfig_str,
         },
     }
 

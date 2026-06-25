@@ -90,7 +90,7 @@ const App: React.FC = () => {
         <Routes>
           <Route
             path="/auth"
-            element={isAuthenticated() ? <Navigate to="/dashboard" replace /> : <Auth />}
+            element={isAuthenticated() ? <Navigate to="/org-setup" replace /> : <Auth />}
           />
           <Route path="/*" element={<ProtectedApp />} />
         </Routes>

@@ -69,6 +69,7 @@ type ClusterValidationResponse = {
     fqdn?: string;
     kubernetesVersion?: string;
     server?: string;
+    kubeconfig?: string;
   };
 };
 
@@ -905,6 +906,7 @@ endpoints:
         clusterDisplayName: cluster.clusterDisplayName || validation.cluster?.name || cluster.aksClusterName,
         region: validation.cluster?.location || cluster.region,
         apiUrl: validation.cluster?.server || (validation.cluster?.fqdn ? `https://${validation.cluster.fqdn}` : cluster.apiUrl),
+        kubeconfigContent: validation.cluster?.kubeconfig || cluster.kubeconfigContent,
       };
       
       setCluster(validatedCluster);

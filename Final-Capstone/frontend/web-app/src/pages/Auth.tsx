@@ -133,7 +133,7 @@ export const Auth: React.FC = () => {
       title: 'Login successful',
       message: `Welcome ${account.fullName}.`,
     });
-    navigate('/dashboard');
+    navigate('/org-setup');
   };
 
 
