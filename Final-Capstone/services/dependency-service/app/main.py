@@ -57,73 +57,107 @@ async def extract_kubeconfig(request: Request, call_next):
 # Fallback databases
 services_db = [
     {
-        "id": "svc-frontend",
-        "name": "frontend",
-        "namespace": "default",
+        "id": "svc-frontend-ui",
+        "name": "frontend-ui",
+        "namespace": "dev",
         "owner": "Web Team",
         "status": "healthy",
-        "replicas": 3,
-        "cpuUsage": 22,
-        "memoryUsage": 45
-    },
-    {
-        "id": "svc-gateway",
-        "name": "api-gateway",
-        "namespace": "default",
-        "owner": "Platform Team",
-        "status": "degraded",
         "replicas": 2,
-        "cpuUsage": 84,
-        "memoryUsage": 78
+        "cpuUsage": 12,
+        "memoryUsage": 25
     },
     {
-        "id": "svc-auth",
-        "name": "auth-service",
-        "namespace": "default",
-        "owner": "Sec Team",
+        "id": "svc-api-gateway",
+        "name": "api-gateway",
+        "namespace": "dev",
+        "owner": "Platform Team",
         "status": "healthy",
         "replicas": 2,
-        "cpuUsage": 15,
+        "cpuUsage": 18,
         "memoryUsage": 32
     },
     {
-        "id": "svc-payment",
-        "name": "payment-service",
-        "namespace": "default",
-        "owner": "Billing Team",
-        "status": "critical",
-        "replicas": 1,
-        "cpuUsage": 99,
-        "memoryUsage": 95
-    },
-    {
-        "id": "svc-order",
-        "name": "order-service",
-        "namespace": "default",
-        "owner": "Backend Core",
-        "status": "healthy",
-        "replicas": 4,
-        "cpuUsage": 34,
-        "memoryUsage": 50
-    },
-    {
-        "id": "svc-order-db",
-        "name": "order-db",
-        "namespace": "db",
-        "owner": "DBA Team",
+        "id": "svc-incident-tracker-gateway",
+        "name": "incident-tracker-gateway",
+        "namespace": "dev",
+        "owner": "Platform Team",
         "status": "healthy",
         "replicas": 1,
-        "cpuUsage": 42,
-        "memoryUsage": 68
+        "cpuUsage": 5,
+        "memoryUsage": 15
+    },
+    {
+        "id": "svc-telemetry-store",
+        "name": "telemetry-store",
+        "namespace": "dev",
+        "owner": "Telemetry Team",
+        "status": "healthy",
+        "replicas": 2,
+        "cpuUsage": 14,
+        "memoryUsage": 28
+    },
+    {
+        "id": "svc-incidents-service",
+        "name": "incidents-service",
+        "namespace": "dev",
+        "owner": "Alerts Team",
+        "status": "healthy",
+        "replicas": 2,
+        "cpuUsage": 20,
+        "memoryUsage": 35
+    },
+    {
+        "id": "svc-dependency-service",
+        "name": "dependency-service",
+        "namespace": "dev",
+        "owner": "Platform Team",
+        "status": "healthy",
+        "replicas": 2,
+        "cpuUsage": 10,
+        "memoryUsage": 22
+    },
+    {
+        "id": "svc-ingest-service",
+        "name": "ingest-service",
+        "namespace": "dev",
+        "owner": "Ingest Team",
+        "status": "healthy",
+        "replicas": 2,
+        "cpuUsage": 15,
+        "memoryUsage": 30
+    },
+    {
+        "id": "svc-analysis-service",
+        "name": "analysis-service",
+        "namespace": "dev",
+        "owner": "AI Team",
+        "status": "healthy",
+        "replicas": 2,
+        "cpuUsage": 25,
+        "memoryUsage": 45
+    },
+    {
+        "id": "svc-redis",
+        "name": "redis",
+        "namespace": "dev",
+        "owner": "Infra Team",
+        "status": "healthy",
+        "replicas": 1,
+        "cpuUsage": 8,
+        "memoryUsage": 12
     }
 ]
 
 dependencies_db = [
-    {"from": "frontend", "to": "api-gateway", "type": "http", "confidence": 100, "latency": 80},
-    {"from": "api-gateway", "to": "auth-service", "type": "grpc", "confidence": 100, "latency": 2500},
-    {"from": "api-gateway", "to": "order-service", "type": "http", "confidence": 100, "latency": 120},
-    {"from": "order-service", "to": "payment-service", "type": "http", "confidence": 100, "latency": 3200},
-    {"from": "order-service", "to": "order-db", "type": "database", "confidence": 100, "latency": 15}
+    {"from": "frontend-ui", "to": "incident-tracker-gateway", "type": "http", "confidence": 100, "latency": 45},
+    {"from": "incident-tracker-gateway", "to": "api-gateway", "type": "http", "confidence": 100, "latency": 30},
+    {"from": "api-gateway", "to": "telemetry-store", "type": "http", "confidence": 100, "latency": 80},
+    {"from": "api-gateway", "to": "incidents-service", "type": "http", "confidence": 100, "latency": 75},
+    {"from": "api-gateway", "to": "dependency-service", "type": "http", "confidence": 100, "latency": 60},
+    {"from": "api-gateway", "to": "ingest-service", "type": "http", "confidence": 100, "latency": 90},
+    {"from": "api-gateway", "to": "analysis-service", "type": "http", "confidence": 100, "latency": 150},
+    {"from": "incidents-service", "to": "redis", "type": "tcp", "confidence": 100, "latency": 5},
+    {"from": "telemetry-store", "to": "redis", "type": "tcp", "confidence": 100, "latency": 5}
 ]
 
 WORKSPACE_TEMP_DIR = Path(__file__).resolve().parents[1] / ".backend-logs" / "tmp"
@@ -135,62 +169,96 @@ def find_named(items: list, name: str) -> dict:
     return {}
 
 async def fetch_k8s_services_and_pods():
+    # 1. Try to load from active_kubeconfig.yaml
     kubeconfig_path = WORKSPACE_TEMP_DIR / "active_kubeconfig.yaml"
-    if not kubeconfig_path.exists():
-        return [], []
+    kubeconfig = None
+    if kubeconfig_path.exists():
+        try:
+            content = kubeconfig_path.read_text(encoding="utf-8")
+            kubeconfig = yaml.safe_load(content)
+        except Exception:
+            pass
 
-    try:
-        content = kubeconfig_path.read_text(encoding="utf-8")
-        kubeconfig = yaml.safe_load(content)
-    except Exception:
-        return [], []
+    server = None
+    headers = {}
+    verify = False
+    cert = None
 
-    if not isinstance(kubeconfig, dict):
-        return [], []
+    if isinstance(kubeconfig, dict):
+        current_context = kubeconfig.get("current-context")
+        contexts = kubeconfig.get("contexts") or []
+        clusters = kubeconfig.get("clusters") or []
+        users = kubeconfig.get("users") or []
 
-    current_context = kubeconfig.get("current-context")
-    contexts = kubeconfig.get("contexts") or []
-    clusters = kubeconfig.get("clusters") or []
-    users = kubeconfig.get("users") or []
+        if current_context:
+            context_entry = find_named(contexts, current_context)
+            context = context_entry.get("context") or {}
+            cluster_name = context.get("cluster")
+            user_name = context.get("user")
 
-    if not current_context:
-        return [], []
+            cluster_entry = find_named(clusters, cluster_name)
+            cluster_data = cluster_entry.get("cluster") or {}
+            user_entry = find_named(users, user_name)
+            user_data = user_entry.get("user") or {}
+            server = cluster_data.get("server")
 
-    context_entry = find_named(contexts, current_context)
-    context = context_entry.get("context") or {}
-    cluster_name = context.get("cluster")
-    user_name = context.get("user")
+            if server:
+                if user_data.get("token"):
+                    headers["Authorization"] = f"Bearer {user_data['token']}"
 
-    cluster_entry = find_named(clusters, cluster_name)
-    cluster_data = cluster_entry.get("cluster") or {}
-    user_entry = find_named(users, user_name)
-    user_data = user_entry.get("user") or {}
-    server = cluster_data.get("server")
+    # 2. In-cluster fallback
+    if not server:
+        token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        ca_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+        if token_path.exists():
+            try:
+                server = "https://kubernetes.default.svc"
+                token = token_path.read_text(encoding="utf-8").strip()
+                headers["Authorization"] = f"Bearer {token}"
+                verify = str(ca_path) if ca_path.exists() else False
+            except Exception:
+                pass
 
     if not server:
         return [], []
 
-    headers = {}
-    if user_data.get("token"):
-        headers["Authorization"] = f"Bearer {user_data['token']}"
-
-    verify = False
-    
     with tempfile.TemporaryDirectory(dir=WORKSPACE_TEMP_DIR) as temp_dir:
         temp_path = Path(temp_dir)
-        cert = None
         
-        if user_data.get("client-certificate-data") and user_data.get("client-key-data"):
-            cert_path = temp_path / "client.crt"
-            key_path = temp_path / "client.key"
-            cert_path.write_bytes(base64.b64decode(user_data["client-certificate-data"]))
-            key_path.write_bytes(base64.b64decode(user_data["client-key-data"]))
-            cert = (str(cert_path), str(key_path))
+        if kubeconfig and isinstance(kubeconfig, dict):
+            current_context = kubeconfig.get("current-context")
+            contexts = kubeconfig.get("contexts") or []
+            context_entry = find_named(contexts, current_context)
+            context = context_entry.get("context") or {}
+            cluster_name = context.get("cluster")
+            user_name = context.get("user")
+            
+            clusters = kubeconfig.get("clusters") or []
+            cluster_entry = find_named(clusters, cluster_name)
+            cluster_data = cluster_entry.get("cluster") or {}
+            
+            users = kubeconfig.get("users") or []
+            user_entry = find_named(users, user_name)
+            user_data = user_entry.get("user") or {}
+            
+            if user_data.get("client-certificate-data") and user_data.get("client-key-data"):
+                cert_path = temp_path / "client.crt"
+                key_path = temp_path / "client.key"
+                cert_path.write_bytes(base64.b64decode(user_data["client-certificate-data"]))
+                key_path.write_bytes(base64.b64decode(user_data["client-key-data"]))
+                cert = (str(cert_path), str(key_path))
+                
+            if cluster_data.get("insecure-skip-tls-verify"):
+                verify = False
+            elif cluster_data.get("certificate-authority-data"):
+                verify_path = temp_path / "ca.crt"
+                verify_path.write_bytes(base64.b64decode(cluster_data["certificate-authority-data"]))
+                verify = str(verify_path)
 
         try:
             async with httpx.AsyncClient(timeout=5.0, verify=verify, cert=cert) as client:
-                services_res = await client.get(f"{server.rstrip('/')}/api/v1/services", headers=headers)
-                pods_res = await client.get(f"{server.rstrip('/')}/api/v1/pods", headers=headers)
+                services_res = await client.get(f"{server.rstrip('/')}/api/v1/namespaces/dev/services", headers=headers)
+                pods_res = await client.get(f"{server.rstrip('/')}/api/v1/namespaces/dev/pods", headers=headers)
                 
                 services = services_res.json().get("items", []) if services_res.status_code == 200 else []
                 pods = pods_res.json().get("items", []) if pods_res.status_code == 200 else []

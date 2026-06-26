@@ -58,68 +58,97 @@ def write_b64_file(directory: Path, filename: str, value: str) -> str:
 
 
 async def fetch_kubernetes_data() -> Dict[str, Any] | None:
+    # 1. Try to load from active_kubeconfig.yaml
     kubeconfig_path = WORKSPACE_TEMP_DIR / "active_kubeconfig.yaml"
-    if not kubeconfig_path.exists():
-        return None
+    kubeconfig = None
+    if kubeconfig_path.exists():
+        try:
+            content = kubeconfig_path.read_text(encoding="utf-8")
+            kubeconfig = yaml.safe_load(content)
+        except Exception:
+            pass
 
-    try:
-        content = kubeconfig_path.read_text(encoding="utf-8")
-        kubeconfig = yaml.safe_load(content)
-    except Exception:
-        return None
+    server = None
+    headers = {}
+    verify: bool | str = True
+    cert: str | tuple[str, str] | None = None
 
-    if not isinstance(kubeconfig, dict):
-        return None
+    if isinstance(kubeconfig, dict):
+        current_context_name = kubeconfig.get("current-context")
+        contexts = kubeconfig.get("contexts") or []
+        clusters = kubeconfig.get("clusters") or []
+        users = kubeconfig.get("users") or []
 
-    current_context_name = kubeconfig.get("current-context")
-    contexts = kubeconfig.get("contexts") or []
-    clusters = kubeconfig.get("clusters") or []
-    users = kubeconfig.get("users") or []
+        if current_context_name:
+            context_entry = find_named(contexts, current_context_name)
+            context = context_entry.get("context") or {}
+            cluster_name = context.get("cluster")
+            user_name = context.get("user")
 
-    if not current_context_name:
-        return None
+            cluster_entry = find_named(clusters, cluster_name)
+            cluster_data = cluster_entry.get("cluster") or {}
+            user_entry = find_named(users, user_name)
+            user_data = user_entry.get("user") or {}
+            server = cluster_data.get("server")
 
-    context_entry = find_named(contexts, current_context_name)
-    context = context_entry.get("context") or {}
-    cluster_name = context.get("cluster")
-    user_name = context.get("user")
+            if server:
+                if user_data.get("token"):
+                    headers["Authorization"] = f"Bearer {user_data['token']}"
 
-    cluster_entry = find_named(clusters, cluster_name)
-    cluster_data = cluster_entry.get("cluster") or {}
-    user_entry = find_named(users, user_name)
-    user_data = user_entry.get("user") or {}
-    server = cluster_data.get("server")
+    # 2. In-cluster fallback if kubeconfig was not present or invalid
+    if not server:
+        token_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
+        ca_path = Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+        if token_path.exists():
+            try:
+                server = "https://kubernetes.default.svc"
+                token = token_path.read_text(encoding="utf-8").strip()
+                headers["Authorization"] = f"Bearer {token}"
+                verify = str(ca_path) if ca_path.exists() else False
+            except Exception:
+                pass
 
     if not server:
         return None
 
-    headers = {}
-    if user_data.get("token"):
-        headers["Authorization"] = f"Bearer {user_data['token']}"
-
     WORKSPACE_TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(dir=WORKSPACE_TEMP_DIR) as temp_dir:
-        temp_path = Path(temp_dir)
-        verify: bool | str = True
-        cert: str | tuple[str, str] | None = None
+    try:
+        # If we have kubeconfig client certificates, handle them
+        with tempfile.TemporaryDirectory(dir=WORKSPACE_TEMP_DIR) as temp_dir:
+            temp_path = Path(temp_dir)
+            
+            if kubeconfig and isinstance(kubeconfig, dict):
+                current_context_name = kubeconfig.get("current-context")
+                contexts = kubeconfig.get("contexts") or []
+                context_entry = find_named(contexts, current_context_name)
+                context = context_entry.get("context") or {}
+                cluster_name = context.get("cluster")
+                user_name = context.get("user")
+                
+                clusters = kubeconfig.get("clusters") or []
+                cluster_entry = find_named(clusters, cluster_name)
+                cluster_data = cluster_entry.get("cluster") or {}
+                
+                users = kubeconfig.get("users") or []
+                user_entry = find_named(users, user_name)
+                user_data = user_entry.get("user") or {}
+                
+                if cluster_data.get("insecure-skip-tls-verify"):
+                    verify = False
+                elif cluster_data.get("certificate-authority-data"):
+                    verify = write_b64_file(temp_path, "ca.crt", cluster_data["certificate-authority-data"])
+                
+                if user_data.get("client-certificate-data") and user_data.get("client-key-data"):
+                    client_cert = write_b64_file(temp_path, "client.crt", user_data["client-certificate-data"])
+                    client_key = write_b64_file(temp_path, "client.key", user_data["client-key-data"])
+                    cert = (client_cert, client_key)
 
-        if cluster_data.get("insecure-skip-tls-verify"):
-            verify = False
-        elif cluster_data.get("certificate-authority-data"):
-            verify = write_b64_file(temp_path, "ca.crt", cluster_data["certificate-authority-data"])
-
-        if user_data.get("client-certificate-data") and user_data.get("client-key-data"):
-            client_cert = write_b64_file(temp_path, "client.crt", user_data["client-certificate-data"])
-            client_key = write_b64_file(temp_path, "client.key", user_data["client-key-data"])
-            cert = (client_cert, client_key)
-
-        try:
             async with httpx.AsyncClient(timeout=10.0, verify=verify, cert=cert) as client:
                 # Fetch Nodes
                 nodes_res = await client.get(f"{server.rstrip('/')}/api/v1/nodes", headers=headers)
                 # Fetch Pods
-                pods_res = await client.get(f"{server.rstrip('/')}/api/v1/pods", headers=headers)
+                pods_res = await client.get(f"{server.rstrip('/')}/api/v1/namespaces/dev/pods", headers=headers)
                 
                 if nodes_res.status_code != 200 or pods_res.status_code != 200:
                     return None
@@ -128,8 +157,8 @@ async def fetch_kubernetes_data() -> Dict[str, Any] | None:
                     "nodes": nodes_res.json(),
                     "pods": pods_res.json()
                 }
-        except Exception:
-            return None
+    except Exception:
+        return None
 
 
 @app.get("/health")
